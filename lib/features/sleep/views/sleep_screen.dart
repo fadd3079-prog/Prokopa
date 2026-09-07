@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:habitflow/core/database/app_database.dart';
 import 'package:habitflow/core/utils/date_utils.dart';
 import 'package:habitflow/features/sleep/providers/sleep_providers.dart';
 import 'package:habitflow/features/sleep/widgets/sleep_chart.dart';

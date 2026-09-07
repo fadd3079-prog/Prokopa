@@ -3,13 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:habitflow/main.dart';
 
 void main() {
-  testWidgets('HabitFlow app smoke test - renders splash screen',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: HabitFlowApp(),
-      ),
-    );
+  testWidgets('HabitFlow app smoke test - renders splash screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const ProviderScope(child: HabitFlowApp()));
 
     // Verify HabitFlow title is displayed on splash screen
     expect(find.text('HabitFlow'), findsOneWidget);
