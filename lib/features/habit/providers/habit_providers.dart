@@ -33,10 +33,10 @@ final habitCompletionRateProvider = FutureProvider.family<double, int>((
   id,
 ) async {
   final db = ref.watch(databaseProvider);
-  // Assuming a method exists to calculate this, else mocking for now
-  try {
-    return await db.habitDao.getCompletionRate(id, 30);
-  } catch (_) {
-    return 0.0;
-  }
+  return db.habitDao.getCompletionRate(id, 30);
+});
+
+final habitLogsProvider = FutureProvider.family<List<HabitLog>, int>((ref, id) async {
+  final db = ref.watch(databaseProvider);
+  return db.habitDao.getLogsForHabit(id);
 });

@@ -96,12 +96,23 @@ class HabitDao extends DatabaseAccessor<AppDatabase> with _$HabitDaoMixin {
         .watch();
   }
 
-  /// Get completions for a date range.
+  /// Get completions for a date range for a specific habit.
   Future<List<HabitLog>> getCompletionsInRange(
       int habitId, DateTime start, DateTime end) {
     return (select(habitLogs)
           ..where((t) =>
               t.habitId.equals(habitId) &
+              t.date.isBiggerOrEqualValue(start) &
+              t.date.isSmallerThanValue(end) &
+              t.completed.equals(true)))
+        .get();
+  }
+
+  /// Get all completions for all habits in a date range.
+  Future<List<HabitLog>> getAllCompletionsInRange(
+      DateTime start, DateTime end) {
+    return (select(habitLogs)
+          ..where((t) =>
               t.date.isBiggerOrEqualValue(start) &
               t.date.isSmallerThanValue(end) &
               t.completed.equals(true)))

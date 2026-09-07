@@ -26,10 +26,10 @@ class AchievementsScreen extends ConsumerWidget {
                     data: (level) => totalXpAsync.when(
                       data: (xp) => XpProgressBar(level: level, currentXp: xp),
                       loading: () => const CircularProgressIndicator(),
-                      error: (_, __) => const Text('Error loading XP'),
+                      error: (err, stack) => const Text('Error loading XP'),
                     ),
                     loading: () => const CircularProgressIndicator(),
-                    error: (_, __) => const Text('Error loading level'),
+                    error: (err, stack) => const Text('Error loading level'),
                   ),
                   const SizedBox(height: 24),
                   const Text(

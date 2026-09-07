@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:habitflow/features/profile/providers/profile_providers.dart';
 import 'package:habitflow/core/providers/core_providers.dart';
+import 'package:habitflow/core/services/notification_service.dart';
 import 'package:habitflow/shared/widgets/stat_card.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -21,8 +22,7 @@ class ProfileScreen extends ConsumerWidget {
           children: [
             userAsync.when(
               data: (user) {
-                final name = user?.name ?? 'User';
-                final name = user.name;
+                final name = user.name.isNotEmpty ? user.name : 'User';
                 final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
                 return Column(
@@ -65,7 +65,7 @@ class ProfileScreen extends ConsumerWidget {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const Text('Failed to load profile'),
+              error: (err, stack) => const Text('Failed to load profile'),
             ),
             const SizedBox(height: 32),
             statsAsync.when(
@@ -130,7 +130,7 @@ class ProfileScreen extends ConsumerWidget {
                 ],
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const Text('Failed to load stats'),
+              error: (err, stack) => const Text('Failed to load stats'),
             ),
             const SizedBox(height: 32),
             Card(
@@ -138,7 +138,11 @@ class ProfileScreen extends ConsumerWidget {
                 leading: const Icon(Icons.brightness_6),
                 title: const Text('Theme'),
                 trailing: DropdownButton<String>(
-                  value: 'System', // This should be tied to a theme provider
+                  value: switch (ref.watch(themeModeProvider)) {
+                    ThemeMode.light => 'Light',
+                    ThemeMode.dark => 'Dark',
+                    _ => 'System',
+                  },
                   underline: const SizedBox(),
                   items: const [
                     DropdownMenuItem(value: 'Light', child: Text('Light')),
@@ -146,8 +150,84 @@ class ProfileScreen extends ConsumerWidget {
                     DropdownMenuItem(value: 'System', child: Text('System')),
                   ],
                   onChanged: (val) {
-                    // Implement theme toggle
+                    if (val == null) return;
+                    final mode = switch (val) {
+                      'Light' => ThemeMode.light,
+                      'Dark' => ThemeMode.dark,
+                      _ => ThemeMode.system,
+                    };
+                    ref.read(themeModeProvider.notifier).setThemeMode(mode);
+                    ref.read(databaseProvider).userDao.updateTheme(val.toLowerCase());
                   },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Text(
+                        'Reminders',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.notifications_active_outlined),
+                      title: const Text('Habit Reminder'),
+                      subtitle: const Text('Time to complete your habit.'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.send_outlined, size: 20),
+                        tooltip: 'Send reminder',
+                        onPressed: () async {
+                          await ref.read(notificationServiceProvider).scheduleHabitReminder();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Habit reminder triggered!')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.edit_note_outlined),
+                      title: const Text('Journal Reminder'),
+                      subtitle: const Text('Reflect your day.'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.send_outlined, size: 20),
+                        tooltip: 'Send reminder',
+                        onPressed: () async {
+                          await ref.read(notificationServiceProvider).scheduleJournalReminder();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Journal reminder triggered!')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.bedtime_outlined),
+                      title: const Text('Sleep Reminder'),
+                      subtitle: const Text('Prepare for better sleep.'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.send_outlined, size: 20),
+                        tooltip: 'Send reminder',
+                        onPressed: () async {
+                          await ref.read(notificationServiceProvider).scheduleSleepReminder();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Sleep reminder triggered!')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

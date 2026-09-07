@@ -25,13 +25,24 @@ class AnalyticsScreen extends ConsumerWidget {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildOverviewStat('Score', '85', context),
-                    _buildOverviewStat('Completion', '75%', context),
-                    _buildOverviewStat('Best Streak', '12', context),
-                  ],
+                child: ref.watch(dailyOverviewStatsProvider).when(
+                  data: (stats) => Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildOverviewStat('Score', '${stats.score}', context),
+                      _buildOverviewStat('Completion', stats.completionRate, context),
+                      _buildOverviewStat('Best Streak', '${stats.bestStreak}', context),
+                    ],
+                  ),
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (err, stack) => Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildOverviewStat('Score', '0', context),
+                      _buildOverviewStat('Completion', '0%', context),
+                      _buildOverviewStat('Best Streak', '0', context),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -60,7 +71,7 @@ class AnalyticsScreen extends ConsumerWidget {
                                   CircularProgressIndicator(
                                     value: habit.completionRate30d,
                                     color: habit.color,
-                                    backgroundColor: habit.color.withOpacity(0.2),
+                                    backgroundColor: habit.color.withValues(alpha: 0.2),
                                   ),
                                   Text(
                                     '${(habit.completionRate30d * 100).toInt()}%',

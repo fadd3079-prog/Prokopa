@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:habitflow/core/database/app_database.dart';
 import 'package:habitflow/core/providers/core_providers.dart';
 import 'package:habitflow/shared/models/enums.dart';
+import 'package:habitflow/core/services/gamification_service.dart';
 
 class SleepLogScreen extends ConsumerStatefulWidget {
   const SleepLogScreen({super.key});
@@ -128,11 +129,12 @@ class _SleepLogScreenState extends ConsumerState<SleepLogScreen> {
       SleepRecordsCompanion.insert(
         sleepStart: bed,
         sleepEnd: wake,
-        duration: duration.inMinutes.toDouble(),
+        duration: duration.inMinutes / 60.0,
         quality: Value(_quality.score),
         date: DateTime(_date.year, _date.month, _date.day),
       ),
     );
+    await ref.read(gamificationServiceProvider).evaluateSleepAchievements();
 
     if (mounted) context.pop();
   }
@@ -200,7 +202,7 @@ class _SleepLogScreenState extends ConsumerState<SleepLogScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? Theme.of(context).primaryColor.withOpacity(0.2)
+                          ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                     ),

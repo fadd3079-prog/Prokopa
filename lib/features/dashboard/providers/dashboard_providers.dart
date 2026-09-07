@@ -26,14 +26,9 @@ final todayCompletionsProvider = StreamProvider<List<HabitLog>>((ref) {
   return db.habitDao.watchTodayCompletions();
 });
 
-final dashboardSleepProvider = FutureProvider<dynamic>((ref) async {
+final dashboardSleepProvider = FutureProvider<SleepRecord?>((ref) async {
   final db = ref.watch(databaseProvider);
-  // Assuming a sleepDao exists. If not, returning null
-  try {
-    return await (db as dynamic).sleepDao.getLatestSleepRecord();
-  } catch (_) {
-    return null;
-  }
+  return db.sleepDao.getLatestRecord();
 });
 
 final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
@@ -41,17 +36,18 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   final habits = await db.habitDao.getActiveHabits();
   final completions = await db.habitDao.watchTodayCompletions().first;
 
-  // Calculate streaks and XP dynamically based on data if real logic isn't available
   int bestStreak = 0;
   for (var h in habits) {
     int streak = await db.habitDao.getCurrentStreak(h.id);
     if (streak > bestStreak) bestStreak = streak;
   }
 
+  final totalXp = await db.achievementDao.getTotalXp();
+
   return DashboardStats(
     totalHabits: habits.length,
     completedToday: completions.length,
     currentBestStreak: bestStreak,
-    totalXp: completions.length * 10,
+    totalXp: totalXp,
   );
 });

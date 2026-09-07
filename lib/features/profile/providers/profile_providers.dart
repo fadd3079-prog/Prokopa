@@ -31,11 +31,7 @@ final userStatsProvider = FutureProvider<UserStats>((ref) async {
   final journalEntries = await db.journalDao.getJournalCount();
   final sleepLogs = (await db.sleepDao.getAllRecords()).length;
 
-  // Mock days active calculation if user doesn't exist
   final user = await db.userDao.getUser();
-  final daysActive = user != null
-      ? DateTime.now().difference(user.createdAt ?? DateTime.now()).inDays
-      : 1;
   final daysActive = (DateTime.now().difference(user.createdAt).inDays + 1)
       .clamp(1, 99999);
 

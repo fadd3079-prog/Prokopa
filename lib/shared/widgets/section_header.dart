@@ -24,7 +24,7 @@ class SectionHeader extends StatelessWidget {
               fontSize: 18,
             ),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

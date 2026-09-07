@@ -90,7 +90,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
         final journal = journals[index];
         return JournalCard(
           journal: journal,
-          onTap: () => context.push('/journal/edit/${journal.id}'),
+          onTap: () => context.push('/journal/${journal.id}'),
         );
       },
     );

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:habitflow/core/database/app_database.dart';
 import 'package:habitflow/core/providers/core_providers.dart';
 import 'package:habitflow/shared/models/enums.dart';
+import 'package:habitflow/core/services/gamification_service.dart';
 
 /// Screen for creating or editing a journal entry.
 class JournalEditorScreen extends ConsumerStatefulWidget {
@@ -40,37 +41,21 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
   Future<void> _loadJournal() async {
     setState(() => _isLoading = true);
     final db = ref.read(databaseProvider);
-    final journal = await db.journalDao.getJournal(widget.journalId!);
-    if (journal != null && mounted) {
-    if (mounted) {
-      setState(() {
-        _contentController.text = journal.content;
-        _type = journal.type;
-        // Map int back to MoodType using fromScore or by switch
-        switch (journal.mood) {
-          case 1:
-            _mood = MoodType.veryBad;
-            break;
-          case 2:
-            _mood = MoodType.bad;
-            break;
-          case 3:
-            _mood = MoodType.normal;
-            break;
-          case 4:
-            _mood = MoodType.good;
-            break;
-          case 5:
-            _mood = MoodType.excellent;
-            break;
-          default:
-            _mood = MoodType.normal;
-        }
-        _energyLevel = journal.energyLevel.toDouble();
-        _isLoading = false;
-      });
-    } else if (mounted) {
-      setState(() => _isLoading = false);
+    try {
+      final journal = await db.journalDao.getJournal(widget.journalId!);
+      if (mounted) {
+        setState(() {
+          _contentController.text = journal.content;
+          _type = journal.type;
+          _mood = MoodType.fromScore(journal.mood);
+          _energyLevel = journal.energyLevel.toDouble();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -90,26 +75,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
     }
 
     final db = ref.read(databaseProvider);
-
-    // Map MoodType back to int
-    int moodScore = 3;
-    switch (_mood) {
-      case MoodType.veryBad:
-        moodScore = 1;
-        break;
-      case MoodType.bad:
-        moodScore = 2;
-        break;
-      case MoodType.normal:
-        moodScore = 3;
-        break;
-      case MoodType.good:
-        moodScore = 4;
-        break;
-      case MoodType.excellent:
-        moodScore = 5;
-        break;
-    }
+    final moodScore = _mood.score;
 
     if (widget.journalId == null) {
       await db.journalDao.createJournal(
@@ -121,6 +87,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
           date: DateTime.now(),
         ),
       );
+      await ref.read(gamificationServiceProvider).evaluateJournalAchievements();
     } else {
       await db.journalDao.updateJournal(
         widget.journalId!,
@@ -166,22 +133,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
     }
   }
 
-  String _getEmojiForMood(MoodType mood) {
-    switch (mood) {
-      case MoodType.veryBad:
-        return '😢';
-      case MoodType.bad:
-        return '😔';
-      case MoodType.normal:
-        return '😐';
-      case MoodType.good:
-        return '😊';
-      case MoodType.excellent:
-        return '😄';
-      default:
-        return '😐';
-    }
-  }
+  String _getEmojiForMood(MoodType mood) => mood.emoji;
 
   @override
   Widget build(BuildContext context) {

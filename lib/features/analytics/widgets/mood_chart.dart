@@ -13,14 +13,6 @@ class MoodChart extends StatelessWidget {
 
   const MoodChart({super.key, required this.data});
 
-  Color _getMoodColor(double score) {
-    if (score >= 4.5) return Colors.green;
-    if (score >= 3.5) return Colors.lightGreen;
-    if (score >= 2.5) return Colors.orangeAccent;
-    if (score >= 1.5) return Colors.orange;
-    return Colors.red;
-  }
-
   String _getMoodEmoji(int score) {
     switch (score) {
       case 1:

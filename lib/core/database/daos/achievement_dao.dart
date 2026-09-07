@@ -54,5 +54,15 @@ class AchievementDao extends DatabaseAccessor<AppDatabase>
         .get();
     return results.isNotEmpty;
   }
+
+  /// Unlock an achievement by name if it is currently locked.
+  Future<bool> unlockByName(String name) async {
+    final locked = await (select(achievements)
+          ..where((t) => t.name.equals(name) & t.unlocked.equals(false)))
+        .get();
+    if (locked.isEmpty) return false;
+    await unlockAchievement(locked.first.id);
+    return true;
+  }
 }
 

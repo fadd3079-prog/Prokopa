@@ -6,6 +6,8 @@ import 'package:habitflow/core/utils/date_utils.dart';
 import 'package:habitflow/core/database/app_database.dart';
 import 'package:habitflow/core/providers/core_providers.dart';
 import 'package:habitflow/core/theme/app_colors.dart';
+import 'package:habitflow/features/profile/providers/profile_providers.dart';
+import 'package:habitflow/core/services/gamification_service.dart';
 
 IconData _getIconData(String iconName) {
   switch (iconName) {
@@ -40,13 +42,16 @@ class DashboardScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              // Assuming AppDateUtils.getGreeting() is a static method
               AppDateUtils.getGreeting(),
               style: const TextStyle(fontSize: 16),
             ),
-            const Text(
-              'User', // Mocked user name
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ref.watch(userProfileProvider).when(
+              data: (user) => Text(
+                user.name.isNotEmpty ? user.name : 'User',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              loading: () => const Text('User', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              error: (err, stack) => const Text('User', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -174,10 +179,13 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSleepSummary(AsyncValue sleepAsync) {
+  Widget _buildSleepSummary(AsyncValue<SleepRecord?> sleepAsync) {
     return sleepAsync.when(
       data: (sleep) {
         if (sleep == null) return const SizedBox.shrink();
+        final hours = sleep.duration.floor();
+        final minutes = ((sleep.duration - hours) * 60).round();
+        final durationStr = minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
         return Card(
           child: ListTile(
             leading: const Icon(
@@ -185,16 +193,23 @@ class DashboardScreen extends ConsumerWidget {
               color: AppColors.primary,
             ),
             title: const Text('Last Night'),
-            subtitle: Text('Slept well: ${sleep.duration ?? "8h"}'),
+            subtitle: Text('Slept: $durationStr (Quality: ${sleep.quality}/5)'),
           ),
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (err, stack) => const SizedBox.shrink(),
     );
   }
 
   Widget _buildHabitsList(AsyncValue<List<Habit>> habitsAsync, WidgetRef ref) {
+    final completionsAsync = ref.watch(todayCompletionsProvider);
+    final completedHabitIds = completionsAsync.when(
+      data: (logs) => logs.where((l) => l.completed).map((l) => l.habitId).toSet(),
+      loading: () => <int>{},
+      error: (err, stack) => <int>{},
+    );
+
     return habitsAsync.when(
       data: (habits) {
         if (habits.isEmpty) {
@@ -206,19 +221,27 @@ class DashboardScreen extends ConsumerWidget {
           itemCount: habits.length,
           itemBuilder: (context, index) {
             final habit = habits[index];
+            final isCompleted = completedHabitIds.contains(habit.id);
             return Card(
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: Color(habit.color),
                   child: Icon(_getIconData(habit.icon), color: Colors.white),
                 ),
-                title: Text(habit.title),
+                title: Text(
+                  habit.title,
+                  style: TextStyle(
+                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                  ),
+                ),
                 subtitle: Text(habit.category),
                 trailing: Checkbox(
-                  value: false, // Update with real state logic
-                  onChanged: (val) {
+                  value: isCompleted,
+                  onChanged: (val) async {
                     final db = ref.read(databaseProvider);
-                    db.habitDao.toggleCompletion(habit.id, DateTime.now());
+                    await db.habitDao.toggleCompletion(habit.id, DateTime.now());
+                    await ref.read(gamificationServiceProvider).evaluateHabitAchievements();
+                    ref.invalidate(dashboardStatsProvider);
                   },
                 ),
               ),

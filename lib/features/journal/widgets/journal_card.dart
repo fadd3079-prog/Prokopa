@@ -9,23 +9,8 @@ class JournalCard extends StatelessWidget {
 
   const JournalCard({super.key, required this.journal, required this.onTap});
 
-  String _getEmojiForMood(int moodScore) {
-    switch (moodScore) {
-      case 1:
-        return '😢';
-      case 2:
-        return '😔';
-      case 3:
-        return '😐';
-      case 4:
-        return '😊';
-      case 5:
-        return '😄';
-      default:
-        return '😐';
-    }
-    return MoodType.fromScore(moodScore).emoji;
-  }
+  String _getEmojiForMood(int moodScore) =>
+      MoodType.fromScore(moodScore).emoji;
 
   @override
   Widget build(BuildContext context) {

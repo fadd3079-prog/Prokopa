@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:habitflow/shared/models/enums.dart';
 import 'package:habitflow/core/providers/core_providers.dart';
 import 'package:habitflow/core/database/app_database.dart';
+import 'package:habitflow/core/services/gamification_service.dart';
 
 class HabitFormScreen extends ConsumerStatefulWidget {
   final int? habitId;
@@ -61,8 +62,6 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
         orElse: () => HabitCategory.health,
       );
       _frequency = habit.frequency;
-      _selectedColor = habit.color ?? _colors[0];
-      _selectedIcon = habit.icon ?? 'fitness_center';
       _selectedColor = habit.color;
       _selectedIcon = habit.icon;
     });
@@ -91,6 +90,7 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
             icon: Value(_selectedIcon),
           ),
         );
+        await ref.read(gamificationServiceProvider).evaluateHabitAchievements();
       } else {
         // Update existing habit
         await db.habitDao.updateHabit(
@@ -153,7 +153,7 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               DropdownButtonFormField<HabitCategory>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 items: HabitCategory.values.map((cat) {
                   return DropdownMenuItem(
                     value: cat,

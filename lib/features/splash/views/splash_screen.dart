@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:habitflow/core/theme/app_colors.dart';
@@ -13,6 +14,7 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
+  Timer? _navTimer;
 
   @override
   void initState() {
@@ -28,7 +30,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 2), () {
+    _navTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
         context.go('/dashboard');
       }
@@ -37,6 +39,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _navTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -64,7 +67,7 @@ class _SplashScreenState extends State<SplashScreen>
                 'Build better habits, every day',
                 style: TextStyle(
                   fontSize: 18,
-                  color: AppColors.primary.withOpacity(0.7),
+                  color: AppColors.primary.withValues(alpha: 0.7),
                 ),
               ),
             ],

@@ -32,13 +32,14 @@ class HabitDetailScreen extends ConsumerWidget {
     final habitAsync = ref.watch(habitDetailProvider(habitId));
     final streakAsync = ref.watch(habitStreakProvider(habitId));
     final completionRateAsync = ref.watch(habitCompletionRateProvider(habitId));
+    final logsAsync = ref.watch(habitLogsProvider(habitId));
 
     return Scaffold(
       appBar: AppBar(
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () => context.push('/habits/edit/$habitId'),
+            onPressed: () => context.push('/habits/$habitId/edit'),
           ),
           IconButton(
             icon: const Icon(Icons.delete),
@@ -110,7 +111,7 @@ class HabitDetailScreen extends ConsumerWidget {
                     ],
                   ),
                   loading: () => const CircularProgressIndicator(),
-                  error: (_, __) => const Text('Error loading stats'),
+                  error: (err, stack) => const Text('Error loading stats'),
                 ),
 
                 const SizedBox(height: 24),
@@ -123,7 +124,8 @@ class HabitDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   loading: () => const CircularProgressIndicator(),
-                  error: (_, __) => const Text('Error loading completion rate'),
+                  error: (err, stack) =>
+                      const Text('Error loading completion rate'),
                 ),
 
                 const SizedBox(height: 24),
@@ -132,7 +134,11 @@ class HabitDetailScreen extends ConsumerWidget {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
-                _buildHistoryGrid(), // Mock implementation
+                logsAsync.when(
+                  data: (logs) => _buildHistoryGrid(logs, habit.color),
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (err, stack) => const Text('Error loading history'),
+                ),
               ],
             ),
           );
@@ -161,7 +167,8 @@ class HabitDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHistoryGrid() {
+  Widget _buildHistoryGrid(List<dynamic> logs, int habitColor) {
+    final now = DateTime.now();
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -172,10 +179,16 @@ class HabitDetailScreen extends ConsumerWidget {
       ),
       itemCount: 30,
       itemBuilder: (context, index) {
-        final completed = index % 3 != 0; // Fake data
+        final targetDate = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: 29 - index));
+        final completed = logs.any((log) =>
+            log.date.year == targetDate.year &&
+            log.date.month == targetDate.month &&
+            log.date.day == targetDate.day &&
+            log.completed == true);
         return Container(
           decoration: BoxDecoration(
-            color: completed ? Colors.green : Colors.grey[300],
+            color: completed ? Color(habitColor) : Colors.grey[300],
             borderRadius: BorderRadius.circular(4),
           ),
         );
@@ -199,7 +212,7 @@ class HabitDetailScreen extends ConsumerWidget {
               final db = ref.read(databaseProvider);
               db.habitDao.deleteHabit(habitId);
               Navigator.of(ctx).pop();
-              context.go('/dashboard');
+              context.go('/habits');
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),

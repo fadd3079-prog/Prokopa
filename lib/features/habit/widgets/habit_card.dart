@@ -5,6 +5,8 @@ import 'package:habitflow/core/database/app_database.dart';
 import 'package:habitflow/core/providers/core_providers.dart';
 import 'package:habitflow/features/habit/providers/habit_providers.dart';
 import 'package:habitflow/features/habit/widgets/streak_display.dart';
+import 'package:habitflow/features/dashboard/providers/dashboard_providers.dart';
+import 'package:habitflow/core/services/gamification_service.dart';
 
 IconData _getIconData(String iconName) {
   switch (iconName) {
@@ -32,12 +34,18 @@ class HabitCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final streakAsync = ref.watch(habitStreakProvider(habit.id));
+    final todayLogsAsync = ref.watch(todayCompletionsProvider);
+    final isCompleted = todayLogsAsync.when(
+      data: (logs) => logs.any((log) => log.habitId == habit.id && log.completed),
+      loading: () => false,
+      error: (err, stack) => false,
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.push('/habits/detail/${habit.id}'),
+        onTap: () => context.push('/habits/${habit.id}'),
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Row(
@@ -90,14 +98,17 @@ class HabitCard extends ConsumerWidget {
                   height: 48,
                   child: CircularProgressIndicator(),
                 ),
-                error: (_, __) => const SizedBox(),
+                error: (err, stack) => const SizedBox(),
               ),
               const SizedBox(width: 8),
               Checkbox(
-                value: false, // In a real app, this would check todayCompletionsProvider
-                onChanged: (val) {
+                value: isCompleted,
+                onChanged: (val) async {
                   final db = ref.read(databaseProvider);
-                  db.habitDao.toggleCompletion(habit.id, DateTime.now());
+                  await db.habitDao.toggleCompletion(habit.id, DateTime.now());
+                  await ref.read(gamificationServiceProvider).evaluateHabitAchievements();
+                  ref.invalidate(habitStreakProvider(habit.id));
+                  ref.invalidate(dashboardStatsProvider);
                 },
               ),
             ],
