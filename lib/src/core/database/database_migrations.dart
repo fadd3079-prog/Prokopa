@@ -67,6 +67,7 @@ const databaseMigrations = <DatabaseMigration>[
         state TEXT NOT NULL DEFAULT 'active'
           CHECK (state IN ('created', 'active', 'paused', 'archived')),
         paused_at TEXT,
+        archived_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         CHECK (
@@ -76,6 +77,17 @@ const databaseMigrations = <DatabaseMigration>[
         )
       )
       ''',
+      '''
+      CREATE TABLE habit_pauses (
+        id TEXT PRIMARY KEY,
+        habit_id TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+      )
+      ''',
+      'CREATE INDEX habit_pauses_by_habit ON habit_pauses (habit_id, start_date)',
       '''
       CREATE TABLE habit_configuration_history (
         id TEXT PRIMARY KEY,
