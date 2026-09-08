@@ -32,6 +32,27 @@ Future<Database> openDatabaseConnection({
         newVersion,
         databaseMigrations,
       ),
+      onDowngrade: (_, storedVersion, supportedVersion) {
+        throw UnsupportedDatabaseVersionException(
+          storedVersion,
+          supportedVersion,
+        );
+      },
     ),
   );
+}
+
+class UnsupportedDatabaseVersionException implements Exception {
+  const UnsupportedDatabaseVersionException(
+    this.storedVersion,
+    this.supportedVersion,
+  );
+
+  final int storedVersion;
+  final int supportedVersion;
+
+  @override
+  String toString() =>
+      'Database schema version $storedVersion is newer than the supported '
+      'version $supportedVersion.';
 }
