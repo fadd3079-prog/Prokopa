@@ -179,6 +179,74 @@ void main() {
   );
 
   test(
+    'same-day schedule edits apply tomorrow without rewriting today',
+    () async {
+      final result = await openStore();
+      final habit = await result.store.create(
+        draft(startDate: DateTime(2026, 9, 7)),
+      );
+
+      final changed = draft(
+        frequency: HabitFrequency.specificDays,
+        specificDays: {DateTime.wednesday},
+        startDate: DateTime(2026, 9, 7),
+      );
+      await result.store.update(habit, changed, now: DateTime(2026, 9, 9));
+      await result.store.update(habit, changed, now: DateTime(2026, 9, 9));
+
+      expect(
+        (await result.store.loadToday(now: DateTime(2026, 9, 9))).single.habit.id,
+        habit.id,
+      );
+      expect(
+        await result.store.loadToday(now: DateTime(2026, 9, 10)),
+        isEmpty,
+      );
+      await result.store.reconcileMissed(before: DateTime(2026, 9, 11));
+      expect(
+        (await result.store.history(habit))
+            .where((record) => record.plannedDate == DateTime(2026, 9, 10)),
+        isEmpty,
+      );
+    },
+  );
+
+  test('weekly target is reduced only for an eligible partial week', () async {
+    final result = await openStore();
+    final habit = await result.store.create(
+      draft(
+        frequency: HabitFrequency.weeklyTarget,
+        weeklyTarget: 7,
+        startDate: DateTime(2026, 9, 9),
+      ),
+      now: DateTime(2026, 9, 9),
+    );
+
+    final today = await result.store.loadToday(now: DateTime(2026, 9, 9));
+
+    expect(today.single.habit.id, habit.id);
+    expect(today.single.weeklyTarget, 5);
+  });
+
+  test('future executions are rejected before they are persisted', () async {
+    final result = await openStore();
+    final today = DateTime.now();
+    final habit = await result.store.create(
+      draft(startDate: today),
+      now: today,
+    );
+
+    await expectLater(
+      result.store.complete(
+        habit,
+        date: today.add(const Duration(days: 1)),
+      ),
+      throwsStateError,
+    );
+    expect(await result.store.history(habit), isEmpty);
+  });
+
+  test(
     'habit deletion removes the habit and its executions transactionally',
     () async {
       final result = await openStore();

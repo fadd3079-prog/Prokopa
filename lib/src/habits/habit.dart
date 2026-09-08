@@ -102,6 +102,16 @@ class Habit {
   final DateTime updatedAt;
   final DateTime? pausedAt;
   final DateTime? archivedAt;
+
+  Habit withDraft(HabitDraft value) => Habit(
+    id: id,
+    draft: value,
+    state: state,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    pausedAt: pausedAt,
+    archivedAt: archivedAt,
+  );
 }
 
 class HabitExecution {

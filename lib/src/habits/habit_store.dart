@@ -69,23 +69,25 @@ class HabitStore {
           _isPausedOn(pauses[habit.id] ?? const [], day)) {
         continue;
       }
+      final effectiveHabit = habit.withDraft(await _draftForDate(habit, day));
       final records = byHabit[habit.id] ?? const [];
       final completed = records
           .where((record) => record.state == HabitExecutionState.completed)
           .length;
-      if (habit.draft.frequency == HabitFrequency.weeklyTarget) {
-        if (completed < habit.draft.weeklyTarget!) {
+      if (effectiveHabit.draft.frequency == HabitFrequency.weeklyTarget) {
+        final target = await _weeklyTargetForPeriod(effectiveHabit, day);
+        if (target > 0 && completed < target) {
           result.add(
             TodayHabit(
-              habit: habit,
+              habit: effectiveHabit,
               completedThisWeek: completed,
-              weeklyTarget: habit.draft.weeklyTarget,
+              weeklyTarget: target,
             ),
           );
         }
         continue;
       }
-      if (!isHabitScheduledOn(habit.draft, day)) {
+      if (!isHabitScheduledOn(effectiveHabit.draft, day)) {
         continue;
       }
       final execution = records
@@ -93,7 +95,7 @@ class HabitStore {
           .firstOrNull;
       result.add(
         TodayHabit(
-          habit: habit,
+          habit: effectiveHabit,
           execution: execution,
           completedThisWeek: completed,
           weeklyTarget: null,
@@ -111,7 +113,9 @@ class HabitStore {
 
   Future<void> complete(Habit habit, {DateTime? date}) async {
     final day = date ?? DateTime.now();
-    if (!await _canRecord(habit, day)) {
+    _ensureNotFuture(day);
+    final effectiveHabit = habit.withDraft(await _draftForDate(habit, day));
+    if (!await _canRecord(effectiveHabit, day)) {
       throw StateError('Habit is not scheduled for this date.');
     }
     final key = localDateKey(day);
@@ -130,12 +134,14 @@ class HabitStore {
       }
       final now = utcTimestamp(DateTime.now());
       final values = {
-        'habit_id': habit.id,
+        'habit_id': effectiveHabit.id,
         'planned_date': key,
         'state': HabitExecutionState.completed.value,
         'skip_reason': null,
         'note': null,
-        'configuration_snapshot': jsonEncode(_configuration(habit.draft)),
+        'configuration_snapshot': jsonEncode(
+          _configuration(effectiveHabit.draft),
+        ),
         'recorded_at': now,
         'updated_at': now,
       };
@@ -161,8 +167,10 @@ class HabitStore {
     DateTime? date,
   }) async {
     final day = date ?? DateTime.now();
-    if (habit.draft.frequency == HabitFrequency.weeklyTarget ||
-        !await _canRecord(habit, day)) {
+    _ensureNotFuture(day);
+    final effectiveHabit = habit.withDraft(await _draftForDate(habit, day));
+    if (effectiveHabit.draft.frequency == HabitFrequency.weeklyTarget ||
+        !await _canRecord(effectiveHabit, day)) {
       throw StateError('Habit is not scheduled for this date.');
     }
     final key = localDateKey(day);
@@ -178,12 +186,14 @@ class HabitStore {
         throw StateError('A completed execution cannot be skipped.');
       }
       final values = {
-        'habit_id': habit.id,
+        'habit_id': effectiveHabit.id,
         'planned_date': key,
         'state': HabitExecutionState.skipped.value,
         'skip_reason': reason,
         'note': null,
-        'configuration_snapshot': jsonEncode(_configuration(habit.draft)),
+        'configuration_snapshot': jsonEncode(
+          _configuration(effectiveHabit.draft),
+        ),
         'recorded_at': now,
         'updated_at': now,
       };
@@ -330,20 +340,38 @@ class HabitStore {
       archivedAt: habit.archivedAt,
     );
     await _database.transaction((transaction) async {
-      await transaction.update(
+      final futureRows = await transaction.query(
         'habit_configuration_history',
-        {'effective_until': effectiveUntil},
-        where: 'habit_id = ? AND effective_until IS NULL',
-        whereArgs: [habit.id],
+        where: 'habit_id = ? AND effective_from = ?',
+        whereArgs: [habit.id, effectiveFrom],
+        limit: 1,
       );
-      await transaction.insert('habit_configuration_history', {
-        'id': newLocalId(),
-        'habit_id': habit.id,
-        'effective_from': effectiveFrom,
-        'effective_until': null,
-        'configuration': jsonEncode(_configuration(updated.draft)),
-        'created_at': utcTimestamp(updatedAt),
-      });
+      if (futureRows.isEmpty) {
+        await transaction.update(
+          'habit_configuration_history',
+          {'effective_until': effectiveUntil},
+          where: 'habit_id = ? AND effective_until IS NULL',
+          whereArgs: [habit.id],
+        );
+        await transaction.insert('habit_configuration_history', {
+          'id': newLocalId(),
+          'habit_id': habit.id,
+          'effective_from': effectiveFrom,
+          'effective_until': null,
+          'configuration': jsonEncode(_configuration(updated.draft)),
+          'created_at': utcTimestamp(updatedAt),
+        });
+      } else {
+        await transaction.update(
+          'habit_configuration_history',
+          {
+            'configuration': jsonEncode(_configuration(updated.draft)),
+            'created_at': utcTimestamp(updatedAt),
+          },
+          where: 'id = ?',
+          whereArgs: [futureRows.single['id']],
+        );
+      }
       await transaction.update(
         'habits',
         _habitValues(updated)
@@ -366,9 +394,6 @@ class HabitStore {
   }
 
   Future<int> dailyStreak(Habit habit, {DateTime? now}) async {
-    if (habit.draft.frequency == HabitFrequency.weeklyTarget) {
-      return 0;
-    }
     final day = now ?? DateTime.now();
     final records = await history(habit);
     final byDate = {
@@ -377,9 +402,13 @@ class HabitStore {
     final pauses = await _pausesFor([habit.id]);
     var cursor = DateTime(day.year, day.month, day.day);
     var total = 0;
-    while (!cursor.isBefore(habit.draft.startDate)) {
+    while (!cursor.isBefore(_localDay(habit.createdAt))) {
+      final draft = await _draftForDate(habit, cursor);
+      if (draft.frequency == HabitFrequency.weeklyTarget) {
+        return 0;
+      }
       if (_isPausedOn(pauses[habit.id] ?? const [], cursor) ||
-          !isHabitScheduledOn(habit.draft, cursor)) {
+          !isHabitScheduledOn(draft, cursor)) {
         cursor = cursor.subtract(const Duration(days: 1));
         continue;
       }
@@ -410,14 +439,11 @@ class HabitStore {
     final pauses = await _pausesFor(habits.map((habit) => habit.id));
     await _database.transaction((transaction) async {
       for (final habit in habits) {
-        if (habit.draft.frequency == HabitFrequency.weeklyTarget) {
+        final configurations = await _configurationRanges(habit.id);
+        if (configurations.isEmpty) {
           continue;
         }
-        var cursor = DateTime(
-          habit.draft.startDate.year,
-          habit.draft.startDate.month,
-          habit.draft.startDate.day,
-        );
+        var cursor = configurations.first.effectiveFrom;
         final archiveDate = habit.archivedAt == null
             ? null
             : DateTime(
@@ -427,7 +453,6 @@ class HabitStore {
               ).subtract(const Duration(days: 1));
         final end = [
           yesterday,
-          ?habit.draft.endDate,
           ?archiveDate,
         ].reduce((left, right) => left.isBefore(right) ? left : right);
         if (cursor.isAfter(end)) {
@@ -444,7 +469,10 @@ class HabitStore {
             .toSet();
         while (!cursor.isAfter(end)) {
           final key = localDateKey(cursor);
-          if (isHabitScheduledOn(habit.draft, cursor) &&
+          final draft = _draftFromRanges(configurations, cursor);
+          if (draft != null &&
+              draft.frequency != HabitFrequency.weeklyTarget &&
+              isHabitScheduledOn(draft, cursor) &&
               !_isPausedOn(pauses[habit.id] ?? const [], cursor) &&
               !known.contains(key)) {
             final timestamp = utcTimestamp(DateTime.now());
@@ -455,7 +483,7 @@ class HabitStore {
               'state': HabitExecutionState.missed.value,
               'skip_reason': null,
               'note': null,
-              'configuration_snapshot': jsonEncode(_configuration(habit.draft)),
+              'configuration_snapshot': jsonEncode(_configuration(draft)),
               'recorded_at': timestamp,
               'updated_at': timestamp,
             });
@@ -474,8 +502,105 @@ class HabitStore {
     if (_isPausedOn(pauses[habit.id] ?? const [], day)) {
       return false;
     }
-    return habit.draft.frequency == HabitFrequency.weeklyTarget ||
-        isHabitScheduledOn(habit.draft, day);
+    return habit.draft.frequency == HabitFrequency.weeklyTarget
+        ? _isWithinActiveRange(habit.draft, day)
+        : isHabitScheduledOn(habit.draft, day);
+  }
+
+  Future<HabitDraft> _draftForDate(Habit habit, DateTime day) async {
+    final ranges = await _configurationRanges(habit.id);
+    return _draftFromRanges(ranges, day) ?? habit.draft;
+  }
+
+  Future<List<_ConfigurationRange>> _configurationRanges(String habitId) async {
+    final rows = await _database.query(
+      'habit_configuration_history',
+      where: 'habit_id = ?',
+      whereArgs: [habitId],
+      orderBy: 'effective_from ASC',
+    );
+    return rows
+        .map(
+          (row) => _ConfigurationRange(
+            effectiveFrom: localDateFromKey(row['effective_from']! as String),
+            effectiveUntil: row['effective_until'] == null
+                ? null
+                : localDateFromKey(row['effective_until']! as String),
+            draft: _draftFromConfiguration(
+              jsonDecode(row['configuration']! as String)
+                  as Map<String, Object?>,
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  HabitDraft? _draftFromRanges(List<_ConfigurationRange> ranges, DateTime day) {
+    final local = _localDay(day);
+    for (final range in ranges.reversed) {
+      if (!local.isBefore(range.effectiveFrom) &&
+          (range.effectiveUntil == null ||
+              !local.isAfter(range.effectiveUntil!))) {
+        return range.draft;
+      }
+    }
+    return null;
+  }
+
+  HabitDraft _draftFromConfiguration(Map<String, Object?> values) => HabitDraft(
+    title: values['title']! as String,
+    purpose: values['purpose'] as String?,
+    category: values['category'] as String?,
+    icon: values['icon'] as String?,
+    color: values['color'] as String?,
+    frequency: HabitFrequencyValue.fromValue(values['frequency']! as String),
+    specificDays: (values['specificDays'] as List? ?? const [])
+        .cast<int>()
+        .toSet(),
+    weeklyTarget: values['weeklyTarget'] as int?,
+    cueWhen: values['cueWhen'] as String?,
+    cueWhere: values['cueWhere'] as String?,
+    cueAction: values['cueAction'] as String?,
+    minimumVersion: values['minimumVersion'] as String?,
+    reminderTime: values['reminderTime'] as String?,
+    startDate: localDateFromKey(values['startDate']! as String),
+    endDate: values['endDate'] == null
+        ? null
+        : localDateFromKey(values['endDate']! as String),
+  );
+
+  Future<int> _weeklyTargetForPeriod(Habit habit, DateTime day) async {
+    final target = habit.draft.weeklyTarget!;
+    final start = startOfWeek(day);
+    final end = endOfWeek(day);
+    final pauses = await _pausesFor([habit.id]);
+    var eligibleDays = 0;
+    for (
+      var cursor = start;
+      !cursor.isAfter(end);
+      cursor = cursor.add(const Duration(days: 1))
+    ) {
+      if (_isWithinActiveRange(habit.draft, cursor) &&
+          !_isPausedOn(pauses[habit.id] ?? const [], cursor)) {
+        eligibleDays++;
+      }
+    }
+    return target < eligibleDays ? target : eligibleDays;
+  }
+
+  void _ensureNotFuture(DateTime day) {
+    if (_localDay(day).isAfter(_localDay(DateTime.now()))) {
+      throw StateError('A future habit execution cannot be recorded.');
+    }
+  }
+
+  DateTime _localDay(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  bool _isWithinActiveRange(HabitDraft draft, DateTime day) {
+    final local = _localDay(day);
+    return !local.isBefore(_localDay(draft.startDate)) &&
+        (draft.endDate == null || !local.isAfter(_localDay(draft.endDate!)));
   }
 
   Future<Map<String, List<_Pause>>> _pausesFor(
@@ -567,7 +692,9 @@ class HabitStore {
       );
     }
     if (draft.frequency == HabitFrequency.weeklyTarget &&
-        (draft.weeklyTarget == null || draft.weeklyTarget! < 1)) {
+        (draft.weeklyTarget == null ||
+            draft.weeklyTarget! < 1 ||
+            draft.weeklyTarget! > 7)) {
       throw ArgumentError.value(
         draft.weeklyTarget,
         'weeklyTarget',
@@ -699,4 +826,16 @@ class _Pause {
 
   final DateTime start;
   final DateTime? end;
+}
+
+class _ConfigurationRange {
+  const _ConfigurationRange({
+    required this.effectiveFrom,
+    required this.effectiveUntil,
+    required this.draft,
+  });
+
+  final DateTime effectiveFrom;
+  final DateTime? effectiveUntil;
+  final HabitDraft draft;
 }
