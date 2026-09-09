@@ -4,6 +4,17 @@ enum HabitState { created, active, paused, archived }
 
 enum HabitExecutionState { completed, skipped, missed }
 
+enum HabitRecoveryAction { continueHabit, reduceTarget, changeCue, pause }
+
+extension HabitRecoveryActionValue on HabitRecoveryAction {
+  String get value => switch (this) {
+    HabitRecoveryAction.continueHabit => 'continue',
+    HabitRecoveryAction.reduceTarget => 'reduce_target',
+    HabitRecoveryAction.changeCue => 'change_cue',
+    HabitRecoveryAction.pause => 'pause',
+  };
+}
+
 extension HabitFrequencyValue on HabitFrequency {
   String get value => switch (this) {
     HabitFrequency.daily => 'daily',
@@ -131,6 +142,20 @@ class HabitExecution {
   final HabitExecutionState state;
   final String? skipReason;
   final String? note;
+  final DateTime recordedAt;
+}
+
+class HabitRecovery {
+  const HabitRecovery({
+    required this.id,
+    required this.habitId,
+    required this.action,
+    required this.recordedAt,
+  });
+
+  final String id;
+  final String habitId;
+  final HabitRecoveryAction action;
   final DateTime recordedAt;
 }
 

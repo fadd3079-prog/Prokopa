@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:prokopa/src/app/prokopa_logo.dart';
 import 'package:prokopa/src/core/constants/brand_constants.dart';
 import 'package:prokopa/src/profile/local_profile.dart';
 
@@ -154,7 +154,7 @@ class _WelcomePage extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SvgPicture.asset(logo, height: 56, semanticsLabel: 'Logo Prokopa'),
+        ProkopaLogo(asset: logo, height: 56),
         const SizedBox(height: 32),
         Text(
           'Ruang kecil untuk kebiasaan dan refleksi.',

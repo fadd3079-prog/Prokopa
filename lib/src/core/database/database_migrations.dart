@@ -6,7 +6,7 @@ typedef DatabaseMigration = ({
   List<String> statements,
 });
 
-const databaseSchemaVersion = 2;
+const databaseSchemaVersion = 4;
 
 const databaseMigrations = <DatabaseMigration>[
   (
@@ -224,6 +224,30 @@ const databaseMigrations = <DatabaseMigration>[
         record_counts TEXT NOT NULL
       )
       ''',
+    ],
+  ),
+  (
+    version: 3,
+    name: 'create_habit_recoveries',
+    statements: [
+      '''
+      CREATE TABLE habit_recoveries (
+        id TEXT PRIMARY KEY,
+        habit_id TEXT NOT NULL,
+        action TEXT NOT NULL
+          CHECK (action IN ('continue', 'reduce_target', 'change_cue', 'pause')),
+        recorded_at TEXT NOT NULL,
+        FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+      )
+      ''',
+      'CREATE INDEX habit_recoveries_by_habit ON habit_recoveries (habit_id, recorded_at DESC)',
+    ],
+  ),
+  (
+    version: 4,
+    name: 'add_habit_reminder_days',
+    statements: [
+      'ALTER TABLE habits ADD COLUMN reminder_days TEXT',
     ],
   ),
 ];

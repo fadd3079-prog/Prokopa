@@ -118,6 +118,32 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
     }
   }
 
+  Future<void> _recover(HabitRecoveryAction action) async {
+    try {
+      if (action == HabitRecoveryAction.pause) {
+        await widget.store.pauseWithRecovery(_habit);
+      } else {
+        await widget.store.recordRecovery(_habit, action);
+      }
+      if (!mounted) {
+        return;
+      }
+      if (action == HabitRecoveryAction.reduceTarget ||
+          action == HabitRecoveryAction.changeCue) {
+        await _edit();
+      } else if (action == HabitRecoveryAction.continueHabit) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lanjutkan dari tindakan berikutnya.')),
+        );
+      }
+      await _reload();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Penyesuaian belum tersimpan. Coba lagi.');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -224,11 +250,20 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
                 spacing: 8,
                 children: [
                   OutlinedButton(
-                    onPressed: _edit,
-                    child: const Text('Ubah kebiasaan'),
+                    onPressed: () =>
+                        _recover(HabitRecoveryAction.continueHabit),
+                    child: const Text('Lanjutkan'),
                   ),
                   OutlinedButton(
-                    onPressed: _pauseOrResume,
+                    onPressed: () => _recover(HabitRecoveryAction.reduceTarget),
+                    child: const Text('Kurangi target'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => _recover(HabitRecoveryAction.changeCue),
+                    child: const Text('Ubah cue'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => _recover(HabitRecoveryAction.pause),
                     child: const Text('Jeda'),
                   ),
                 ],

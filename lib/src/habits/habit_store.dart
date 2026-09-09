@@ -240,6 +240,39 @@ class HabitStore {
     });
   }
 
+  Future<void> pauseWithRecovery(Habit habit, {DateTime? now}) async {
+    final day = now ?? DateTime.now();
+    if (habit.state != HabitState.active) {
+      return;
+    }
+    final timestamp = utcTimestamp(day);
+    await _database.transaction((transaction) async {
+      await transaction.update(
+        'habits',
+        {
+          'state': HabitState.paused.value,
+          'paused_at': timestamp,
+          'updated_at': timestamp,
+        },
+        where: 'id = ?',
+        whereArgs: [habit.id],
+      );
+      await transaction.insert('habit_pauses', {
+        'id': newLocalId(),
+        'habit_id': habit.id,
+        'start_date': localDateKey(day),
+        'end_date': null,
+        'created_at': timestamp,
+      });
+      await transaction.insert('habit_recoveries', {
+        'id': newLocalId(),
+        'habit_id': habit.id,
+        'action': HabitRecoveryAction.pause.value,
+        'recorded_at': timestamp,
+      });
+    });
+  }
+
   Future<void> resume(Habit habit, {DateTime? now}) async {
     final day = now ?? DateTime.now();
     if (habit.state != HabitState.paused) {
@@ -316,6 +349,51 @@ class HabitStore {
       where: 'id = ?',
       whereArgs: [habit.id],
     );
+  }
+
+  Future<void> recordRecovery(
+    Habit habit,
+    HabitRecoveryAction action, {
+    DateTime? now,
+  }) {
+    return _database.insert('habit_recoveries', {
+      'id': newLocalId(),
+      'habit_id': habit.id,
+      'action': action.value,
+      'recorded_at': utcTimestamp(now ?? DateTime.now()),
+    });
+  }
+
+  Future<List<HabitRecovery>> recoveryHistory(Habit habit) async {
+    final rows = await _database.query(
+      'habit_recoveries',
+      where: 'habit_id = ?',
+      whereArgs: [habit.id],
+      orderBy: 'recorded_at DESC',
+    );
+    return rows
+        .map(
+          (row) => HabitRecovery(
+            id: row['id']! as String,
+            habitId: row['habit_id']! as String,
+            action: switch (row['action']! as String) {
+              'reduce_target' => HabitRecoveryAction.reduceTarget,
+              'change_cue' => HabitRecoveryAction.changeCue,
+              'pause' => HabitRecoveryAction.pause,
+              _ => HabitRecoveryAction.continueHabit,
+            },
+            recordedAt: DateTime.parse(row['recorded_at']! as String),
+          ),
+        )
+        .toList();
+  }
+
+  Future<int> recoveryCount(Habit habit) {
+    return _database
+        .rawQuery('SELECT COUNT(*) FROM habit_recoveries WHERE habit_id = ?', [
+          habit.id,
+        ])
+        .then((rows) => Sqflite.firstIntValue(rows) ?? 0);
   }
 
   Future<void> delete(Habit habit) {
@@ -437,13 +515,17 @@ class HabitStore {
     ).subtract(const Duration(days: 1));
     final habits = await list(includeArchived: true);
     final pauses = await _pausesFor(habits.map((habit) => habit.id));
+    final configurations = <String, List<_ConfigurationRange>>{};
+    for (final habit in habits) {
+      configurations[habit.id] = await _configurationRanges(habit.id);
+    }
     await _database.transaction((transaction) async {
       for (final habit in habits) {
-        final configurations = await _configurationRanges(habit.id);
-        if (configurations.isEmpty) {
+        final ranges = configurations[habit.id] ?? const [];
+        if (ranges.isEmpty) {
           continue;
         }
-        var cursor = configurations.first.effectiveFrom;
+        var cursor = ranges.first.effectiveFrom;
         final archiveDate = habit.archivedAt == null
             ? null
             : DateTime(
@@ -469,7 +551,7 @@ class HabitStore {
             .toSet();
         while (!cursor.isAfter(end)) {
           final key = localDateKey(cursor);
-          final draft = _draftFromRanges(configurations, cursor);
+          final draft = _draftFromRanges(ranges, cursor);
           if (draft != null &&
               draft.frequency != HabitFrequency.weeklyTarget &&
               isHabitScheduledOn(draft, cursor) &&

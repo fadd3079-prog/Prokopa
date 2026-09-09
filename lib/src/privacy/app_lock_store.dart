@@ -96,6 +96,7 @@ class AppLockStore {
   Future<void> deleteAllData() async {
     const tables = [
       'notification_preferences',
+      'habit_recoveries',
       'habit_pauses',
       'habit_executions',
       'habit_configuration_history',

@@ -195,13 +195,13 @@ void main() {
       await result.store.update(habit, changed, now: DateTime(2026, 9, 9));
 
       expect(
-        (await result.store.loadToday(now: DateTime(2026, 9, 9))).single.habit.id,
+        (await result.store.loadToday(now: DateTime(2026, 9, 9)))
+            .single
+            .habit
+            .id,
         habit.id,
       );
-      expect(
-        await result.store.loadToday(now: DateTime(2026, 9, 10)),
-        isEmpty,
-      );
+      expect(await result.store.loadToday(now: DateTime(2026, 9, 10)), isEmpty);
       await result.store.reconcileMissed(before: DateTime(2026, 9, 11));
       expect(
         (await result.store.history(habit))
@@ -237,13 +237,36 @@ void main() {
     );
 
     await expectLater(
-      result.store.complete(
-        habit,
-        date: today.add(const Duration(days: 1)),
-      ),
+      result.store.complete(habit, date: today.add(const Duration(days: 1))),
       throwsStateError,
     );
     expect(await result.store.history(habit), isEmpty);
+  });
+
+  test('recovery actions persist without changing past executions', () async {
+    final result = await openStore();
+    final habit = await result.store.create(
+      draft(startDate: DateTime(2026, 9, 7)),
+    );
+    await result.store.reconcileMissed(before: DateTime(2026, 9, 9));
+    final history = await result.store.history(habit);
+
+    await result.store.recordRecovery(
+      habit,
+      HabitRecoveryAction.continueHabit,
+      now: DateTime(2026, 9, 9),
+    );
+
+    expect(
+      (await result.store.history(habit))
+          .map((record) => (record.plannedDate, record.state)),
+      history.map((record) => (record.plannedDate, record.state)),
+    );
+    expect(await result.store.recoveryCount(habit), 1);
+    expect(
+      (await result.store.recoveryHistory(habit)).single.action,
+      HabitRecoveryAction.continueHabit,
+    );
   });
 
   test(

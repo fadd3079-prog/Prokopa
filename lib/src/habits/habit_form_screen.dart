@@ -24,6 +24,11 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
   late Set<int> _days;
   late int _weeklyTarget;
   late DateTime _startDate;
+  DateTime? _endDate;
+  String? _category;
+  String? _icon;
+  String? _color;
+  TimeOfDay? _reminderTime;
   var _saving = false;
   String? _error;
 
@@ -41,6 +46,11 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     _days = {...(draft?.specificDays ?? const <int>{})};
     _weeklyTarget = draft?.weeklyTarget ?? 3;
     _startDate = draft?.startDate ?? DateTime.now();
+    _endDate = draft?.endDate;
+    _category = draft?.category;
+    _icon = draft?.icon;
+    _color = draft?.color;
+    _reminderTime = _timeFromValue(draft?.reminderTime);
   }
 
   @override
@@ -57,6 +67,9 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
   HabitDraft _draft() => HabitDraft(
     title: _title.text,
     purpose: _purpose.text,
+    category: _category,
+    icon: _icon,
+    color: _color,
     frequency: _frequency,
     specificDays: _days,
     weeklyTarget: _frequency == HabitFrequency.weeklyTarget
@@ -66,7 +79,11 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     cueWhere: _cueWhere.text,
     cueAction: _cueAction.text,
     minimumVersion: _minimum.text,
+    reminderTime: _reminderTime == null
+        ? null
+        : '${_reminderTime!.hour.toString().padLeft(2, '0')}:${_reminderTime!.minute.toString().padLeft(2, '0')}',
     startDate: _startDate,
+    endDate: _endDate,
   );
 
   Future<void> _save() async {
@@ -108,6 +125,28 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     }
   }
 
+  Future<void> _pickEndDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _endDate ?? _startDate,
+      firstDate: _startDate,
+      lastDate: DateTime(2100),
+    );
+    if (selected != null) {
+      setState(() => _endDate = selected);
+    }
+  }
+
+  Future<void> _pickReminderTime() async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: _reminderTime ?? TimeOfDay.now(),
+    );
+    if (selected != null) {
+      setState(() => _reminderTime = selected);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,7 +161,6 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
               controller: _title,
               enabled: !_saving,
               textCapitalization: TextCapitalization.sentences,
-              maxLength: 80,
               decoration: const InputDecoration(labelText: 'Nama kebiasaan'),
             ),
             TextField(
@@ -197,6 +235,63 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
               ),
             ],
             const SizedBox(height: 20),
+            Text('Pengaturan', style: Theme.of(context).textTheme.titleMedium),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: const InputDecoration(labelText: 'Kategori'),
+              items: _categories
+                  .map(
+                    (value) =>
+                        DropdownMenuItem(value: value, child: Text(value)),
+                  )
+                  .toList(),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _category = value),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _icon,
+              decoration: const InputDecoration(labelText: 'Ikon'),
+              items: _icons
+                  .map(
+                    (icon) => DropdownMenuItem(
+                      value: icon.$1,
+                      child: Row(
+                        children: [
+                          Icon(icon.$2),
+                          const SizedBox(width: 12),
+                          Text(icon.$1),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _icon = value),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _color,
+              decoration: const InputDecoration(labelText: 'Warna aksen'),
+              items: _colors
+                  .map(
+                    (color) => DropdownMenuItem(
+                      value: color.$1,
+                      child: Row(
+                        children: [
+                          Icon(Icons.circle, color: color.$2),
+                          const SizedBox(width: 12),
+                          Text(color.$1),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _color = value),
+            ),
+            const SizedBox(height: 20),
             Text('Cue', style: Theme.of(context).textTheme.titleMedium),
             TextField(
               controller: _cueWhen,
@@ -226,6 +321,45 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
               trailing: const Icon(Icons.calendar_today_outlined),
               onTap: _saving ? null : _pickStartDate,
             ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Berakhir'),
+              subtitle: Text(
+                _endDate == null
+                    ? 'Tanpa tanggal akhir'
+                    : localDateKey(_endDate!),
+              ),
+              trailing: _endDate == null
+                  ? const Icon(Icons.event_available_outlined)
+                  : IconButton(
+                      tooltip: 'Hapus tanggal akhir',
+                      onPressed: _saving
+                          ? null
+                          : () => setState(() => _endDate = null),
+                      icon: const Icon(Icons.clear),
+                    ),
+              onTap: _saving ? null : _pickEndDate,
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Pengingat lokal'),
+              subtitle: Text(
+                _reminderTime == null
+                    ? 'Tidak diaktifkan'
+                    : MaterialLocalizations.of(context)
+                          .formatTimeOfDay(_reminderTime!),
+              ),
+              trailing: _reminderTime == null
+                  ? const Icon(Icons.notifications_none)
+                  : IconButton(
+                      tooltip: 'Matikan pengingat',
+                      onPressed: _saving
+                          ? null
+                          : () => setState(() => _reminderTime = null),
+                      icon: const Icon(Icons.notifications_off_outlined),
+                    ),
+              onTap: _saving ? null : _pickReminderTime,
+            ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -245,6 +379,50 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     );
   }
 }
+
+TimeOfDay? _timeFromValue(String? value) {
+  if (value == null) {
+    return null;
+  }
+  final values = value.split(':');
+  if (values.length != 2) {
+    return null;
+  }
+  final hour = int.tryParse(values[0]);
+  final minute = int.tryParse(values[1]);
+  if (hour == null || minute == null || hour > 23 || minute > 59) {
+    return null;
+  }
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
+const _categories = [
+  'Kesehatan',
+  'Belajar',
+  'Produktivitas',
+  'Pikiran',
+  'Gaya hidup',
+  'Pribadi',
+  'Tidur',
+  'Lainnya',
+];
+
+const _icons = [
+  ('Buku', Icons.menu_book_outlined),
+  ('Bergerak', Icons.directions_walk_outlined),
+  ('Fokus', Icons.center_focus_strong_outlined),
+  ('Pikiran', Icons.self_improvement_outlined),
+  ('Tidur', Icons.bedtime_outlined),
+  ('Cek', Icons.check_circle_outline),
+];
+
+const _colors = [
+  ('Indigo', Color(0xFF3949AB)),
+  ('Hijau', Color(0xFF2E7D32)),
+  ('Oranye', Color(0xFFEF6C00)),
+  ('Merah muda', Color(0xFFC2185B)),
+  ('Abu-abu', Color(0xFF546E7A)),
+];
 
 const _weekdays = [
   (day: DateTime.monday, label: 'Sen'),

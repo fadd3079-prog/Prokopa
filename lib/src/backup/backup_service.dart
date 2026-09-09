@@ -37,6 +37,7 @@ class BackupService {
     ('habit_configuration_history', 'id'),
     ('habit_pauses', 'id'),
     ('habit_executions', 'id'),
+    ('habit_recoveries', 'id'),
     ('journal_entries', 'id'),
     ('mood_records', 'id'),
     ('sleep_records', 'id'),
