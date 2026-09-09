@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prokopa/src/app/prokopa_logo.dart';
 import 'package:prokopa/src/core/constants/brand_constants.dart';
 
 void main() {
@@ -21,5 +23,25 @@ void main() {
     expect(content.isNotEmpty, isTrue);
     expect(content.contains('<svg'), isTrue);
     expect(content.contains('#3949ab'), isTrue);
+  });
+
+  testWidgets('ProkopaLogo renders in light and dark modes', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        themeMode: ThemeMode.light,
+        home: Scaffold(body: ProkopaLogo(height: 48)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ProkopaLogo), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: const Scaffold(body: ProkopaLogo(height: 48)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ProkopaLogo), findsOneWidget);
   });
 }

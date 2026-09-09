@@ -3,6 +3,7 @@ import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_detail_screen.dart';
 import 'package:prokopa/src/habits/habit_form_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
+import 'package:prokopa/src/app/prokopa_logo.dart';
 
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key, required this.store});
@@ -121,12 +122,27 @@ class _TodayScreenState extends State<TodayScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Text('Hari ini', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 4),
-            Text(
-              habits.isEmpty
-                  ? 'Belum ada kebiasaan yang terjadwal.'
-                  : '${habits.where((habit) => habit.isComplete).length} dari ${habits.length} selesai.',
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Hari ini', style: Theme.of(context).textTheme.headlineSmall),
+                      const SizedBox(height: 4),
+                      Text(
+                        habits.isEmpty
+                            ? 'Belum ada kebiasaan yang terjadwal.'
+                            : '${habits.where((habit) => habit.isComplete).length} dari ${habits.length} selesai.',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const ProkopaLogo(height: 32),
+              ],
             ),
             const SizedBox(height: 20),
             if (habits.isEmpty)

@@ -8,6 +8,7 @@ import 'package:prokopa/src/privacy/privacy_screen.dart';
 import 'package:prokopa/src/notifications/local_notification_service.dart';
 import 'package:prokopa/src/notifications/notification_store.dart';
 import 'package:prokopa/src/notifications/notifications_screen.dart';
+import 'package:prokopa/src/app/prokopa_logo.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -163,6 +164,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: const Text('Pengingat'),
             ),
           ],
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 16),
+          Center(
+            child: Column(
+              children: [
+                const ProkopaLogo(height: 36),
+                const SizedBox(height: 8),
+                Text(
+                  'Prokopa',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Versi 0.1.0 (Habits and Journaling)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Ruang kecil untuk kebiasaan dan refleksi harian.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
