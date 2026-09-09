@@ -12,6 +12,7 @@ class InsightsScreen extends StatefulWidget {
 
 class _InsightsScreenState extends State<InsightsScreen> {
   List<LocalInsight>? _insights;
+  String? _error;
 
   @override
   void initState() {
@@ -20,9 +21,18 @@ class _InsightsScreenState extends State<InsightsScreen> {
   }
 
   Future<void> _reload() async {
-    final insights = await widget.store.refresh();
-    if (mounted) {
-      setState(() => _insights = insights);
+    try {
+      final insights = await widget.store.refresh();
+      if (mounted) {
+        setState(() {
+          _insights = insights;
+          _error = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Insight belum dapat dimuat. Coba lagi.');
+      }
     }
   }
 
@@ -37,6 +47,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
     return SafeArea(
       child: insights == null
           ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: FilledButton(
+                onPressed: _reload,
+                child: const Text('Coba lagi'),
+              ),
+            )
           : insights.isEmpty
           ? Center(
               child: Padding(

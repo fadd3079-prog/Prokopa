@@ -75,6 +75,7 @@ class HabitDraft {
     this.cueAction,
     this.minimumVersion,
     this.reminderTime,
+    this.reminderDays = const {},
     this.endDate,
   });
 
@@ -91,6 +92,7 @@ class HabitDraft {
   final String? cueAction;
   final String? minimumVersion;
   final String? reminderTime;
+  final Set<int> reminderDays;
   final DateTime startDate;
   final DateTime? endDate;
 }
@@ -157,6 +159,28 @@ class HabitRecovery {
   final String habitId;
   final HabitRecoveryAction action;
   final DateTime recordedAt;
+}
+
+class HabitProgress {
+  const HabitProgress({
+    required this.habit,
+    required this.repetitions,
+    required this.currentStreak,
+    required this.longestStreak,
+    required this.recoveryCount,
+    this.weekCompleted,
+    this.weekTarget,
+  });
+
+  final Habit habit;
+  final int repetitions;
+  final int currentStreak;
+  final int longestStreak;
+  final int recoveryCount;
+  final int? weekCompleted;
+  final int? weekTarget;
+
+  bool get isWeeklyTarget => weekTarget != null;
 }
 
 class TodayHabit {

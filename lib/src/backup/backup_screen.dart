@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:prokopa/src/backup/backup_file_service.dart';
 import 'package:prokopa/src/backup/backup_service.dart';
+import 'package:prokopa/src/notifications/local_notification_service.dart';
 
 class BackupScreen extends StatefulWidget {
-  const BackupScreen({super.key, required this.backup});
+  const BackupScreen({
+    super.key,
+    required this.backup,
+    this.notificationService,
+    this.onRestored,
+  });
 
   final BackupService backup;
+  final LocalNotificationService? notificationService;
+  final Future<String?> Function()? onRestored;
 
   @override
   State<BackupScreen> createState() => _BackupScreenState();
@@ -50,9 +58,7 @@ class _BackupScreenState extends State<BackupScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Pulihkan backup?'),
-          content: Text(
-            'Backup ini berisi ${preview.counts.values.fold<int>(0, (sum, count) => sum + count)} catatan dan akan mengganti data lokal saat ini.',
-          ),
+          content: _BackupPreviewContent(preview: preview),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -72,11 +78,13 @@ class _BackupScreenState extends State<BackupScreen> {
         _working = true;
         _message = null;
       });
+      await widget.notificationService?.cancelAll();
       await widget.backup.replace(source);
+      final warning = await widget.onRestored?.call();
       if (mounted) {
         setState(() {
           _working = false;
-          _message = 'Backup dipulihkan.';
+          _message = warning ?? 'Backup dipulihkan.';
         });
       }
     } on BackupFormatException catch (error) {
@@ -99,7 +107,7 @@ class _BackupScreenState extends State<BackupScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             const Text(
-              'Backup dibuat hanya ketika kamu memilihnya. Tidak ada sinkronisasi cloud.',
+              'Backup dibuat hanya ketika kamu memilihnya. File ini mencakup kebiasaan, jurnal, suasana, tidur, pengaturan, dan pencapaian lokal. Tidak ada sinkronisasi cloud.',
             ),
             const SizedBox(height: 20),
             FilledButton(
@@ -124,6 +132,38 @@ class _BackupScreenState extends State<BackupScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BackupPreviewContent extends StatelessWidget {
+  const _BackupPreviewContent({required this.preview});
+
+  final BackupPreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final createdAt = preview.createdAt.toLocal();
+    int count(String table) => preview.counts[table] ?? 0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Dibuat ${createdAt.day.toString().padLeft(2, '0')}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}',
+        ),
+        Text('Aplikasi ${preview.appVersion} · skema ${preview.schemaVersion}'),
+        const SizedBox(height: 12),
+        Text('${count('habits')} kebiasaan'),
+        Text('${count('journal_entries')} jurnal'),
+        Text('${count('mood_records')} catatan suasana'),
+        Text('${count('sleep_records')} catatan tidur'),
+        Text('${count('achievements')} pencapaian'),
+        const SizedBox(height: 12),
+        const Text(
+          'Data lokal saat ini akan diganti setelah kamu melanjutkan.',
+        ),
+      ],
     );
   }
 }

@@ -6,7 +6,7 @@ typedef DatabaseMigration = ({
   List<String> statements,
 });
 
-const databaseSchemaVersion = 4;
+const databaseSchemaVersion = 5;
 
 const databaseMigrations = <DatabaseMigration>[
   (
@@ -246,8 +246,18 @@ const databaseMigrations = <DatabaseMigration>[
   (
     version: 4,
     name: 'add_habit_reminder_days',
+    statements: ['ALTER TABLE habits ADD COLUMN reminder_days TEXT'],
+  ),
+  (
+    version: 5,
+    name: 'link_recovery_to_interruption',
     statements: [
-      'ALTER TABLE habits ADD COLUMN reminder_days TEXT',
+      'ALTER TABLE habit_recoveries ADD COLUMN missed_planned_date TEXT',
+      '''
+      CREATE UNIQUE INDEX habit_recoveries_continue_once
+      ON habit_recoveries (habit_id, action, missed_planned_date)
+      WHERE action = 'continue' AND missed_planned_date IS NOT NULL
+      ''',
     ],
   ),
 ];

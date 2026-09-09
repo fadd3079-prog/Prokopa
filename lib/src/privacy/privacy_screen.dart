@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:prokopa/src/notifications/local_notification_service.dart';
 import 'package:prokopa/src/privacy/app_lock_store.dart';
 
 class PrivacyScreen extends StatefulWidget {
@@ -6,10 +7,12 @@ class PrivacyScreen extends StatefulWidget {
     super.key,
     required this.store,
     required this.onDataReset,
+    this.notificationService,
   });
 
   final AppLockStore store;
   final VoidCallback onDataReset;
+  final LocalNotificationService? notificationService;
 
   @override
   State<PrivacyScreen> createState() => _PrivacyScreenState();
@@ -72,6 +75,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       return;
     }
     try {
+      await widget.notificationService?.cancelAll();
       await widget.store.deleteAllData();
       widget.onDataReset();
     } catch (_) {
@@ -135,6 +139,7 @@ class _AppLockSettings extends StatefulWidget {
 
 class _AppLockSettingsState extends State<_AppLockSettings> {
   final _pin = TextEditingController();
+  final _newPin = TextEditingController();
   final _confirmation = TextEditingController();
   var _timeout = 1;
   String? _error;
@@ -142,6 +147,7 @@ class _AppLockSettingsState extends State<_AppLockSettings> {
   @override
   void dispose() {
     _pin.dispose();
+    _newPin.dispose();
     _confirmation.dispose();
     super.dispose();
   }
@@ -176,6 +182,30 @@ class _AppLockSettingsState extends State<_AppLockSettings> {
     }
   }
 
+  Future<void> _changePin() async {
+    if (!await widget.store.verifyPin(_pin.text)) {
+      setState(() => _error = 'PIN saat ini tidak cocok.');
+      return;
+    }
+    if (_newPin.text != _confirmation.text) {
+      setState(() => _error = 'PIN baru dan konfirmasi tidak sama.');
+      return;
+    }
+    try {
+      await widget.store.enablePin(
+        _newPin.text,
+        timeout: await widget.store.timeoutMinutes(),
+      );
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } on ArgumentError catch (error) {
+      setState(() => _error = error.message?.toString());
+    } catch (_) {
+      setState(() => _error = 'PIN belum dapat diubah. Coba lagi.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final enabling = !widget.enabled;
@@ -186,7 +216,7 @@ class _AppLockSettingsState extends State<_AppLockSettings> {
           padding: const EdgeInsets.all(20),
           children: [
             Text(
-              enabling ? 'Buat PIN lokal' : 'Nonaktifkan kunci aplikasi',
+              enabling ? 'Buat PIN lokal' : 'Kelola kunci aplikasi',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
@@ -222,6 +252,23 @@ class _AppLockSettingsState extends State<_AppLockSettings> {
                 ],
                 onChanged: (value) => setState(() => _timeout = value!),
               ),
+            ] else ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _newPin,
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'PIN baru'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _confirmation,
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Konfirmasi PIN baru',
+                ),
+              ),
             ],
             if (_error != null)
               Padding(
@@ -230,9 +277,16 @@ class _AppLockSettingsState extends State<_AppLockSettings> {
               ),
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: enabling ? _save : _disable,
-              child: Text(enabling ? 'Aktifkan kunci' : 'Nonaktifkan kunci'),
+              onPressed: enabling ? _save : _changePin,
+              child: Text(enabling ? 'Aktifkan kunci' : 'Ubah PIN'),
             ),
+            if (!enabling) ...[
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: _disable,
+                child: const Text('Nonaktifkan kunci'),
+              ),
+            ],
           ],
         ),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:prokopa/src/achievements/achievement_store.dart';
 import 'package:prokopa/src/backup/backup_service.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/habits/today_screen.dart';
@@ -11,6 +12,7 @@ import 'package:prokopa/src/profile/profile_screen.dart';
 import 'package:prokopa/src/profile/profile_store.dart';
 import 'package:prokopa/src/privacy/app_lock_store.dart';
 import 'package:prokopa/src/notifications/local_notification_service.dart';
+import 'package:prokopa/src/notifications/habit_reminder_service.dart';
 import 'package:prokopa/src/notifications/notification_store.dart';
 import 'package:prokopa/src/wellbeing/wellbeing_store.dart';
 import 'package:prokopa/src/progress/progress_screen.dart';
@@ -26,11 +28,14 @@ class AppShell extends StatefulWidget {
     this.wellbeingStore,
     this.progressStore,
     this.insightStore,
+    this.achievementStore,
     this.backupService,
     this.appLockStore,
     this.onDataReset,
+    this.onDataRestored,
     this.notificationStore,
     this.notificationService,
+    this.habitReminderService,
     this.onProfileChanged,
   });
 
@@ -41,11 +46,14 @@ class AppShell extends StatefulWidget {
   final WellbeingStore? wellbeingStore;
   final ProgressStore? progressStore;
   final InsightStore? insightStore;
+  final AchievementStore? achievementStore;
   final BackupService? backupService;
   final AppLockStore? appLockStore;
   final VoidCallback? onDataReset;
+  final Future<String?> Function()? onDataRestored;
   final NotificationStore? notificationStore;
   final LocalNotificationService? notificationService;
+  final HabitReminderService? habitReminderService;
   final ValueChanged<LocalProfile>? onProfileChanged;
 
   @override
@@ -88,7 +96,10 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final screens = [
       if (widget.habitStore != null)
-        TodayScreen(store: widget.habitStore!)
+        TodayScreen(
+          store: widget.habitStore!,
+          reminderService: widget.habitReminderService,
+        )
       else
         const _PlaceholderDestination(label: 'Today'),
       if (widget.journalStore != null && widget.wellbeingStore != null)
@@ -102,6 +113,7 @@ class _AppShellState extends State<AppShell> {
         ProgressScreen(
           store: widget.progressStore!,
           wellbeingStore: widget.wellbeingStore!,
+          habitStore: widget.habitStore,
         )
       else
         const _PlaceholderDestination(label: 'Progress'),
@@ -117,10 +129,13 @@ class _AppShellState extends State<AppShell> {
           store: widget.profileStore!,
           onChanged: widget.onProfileChanged!,
           backupService: widget.backupService,
+          onDataRestored: widget.onDataRestored,
           appLockStore: widget.appLockStore,
           onDataReset: widget.onDataReset,
           notificationStore: widget.notificationStore,
           notificationService: widget.notificationService,
+          habitReminderService: widget.habitReminderService,
+          achievementStore: widget.achievementStore,
         )
       else
         const _PlaceholderDestination(label: 'Profile'),

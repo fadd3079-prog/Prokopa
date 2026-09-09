@@ -3,9 +3,10 @@ import 'package:prokopa/src/wellbeing/mood_record.dart';
 import 'package:prokopa/src/wellbeing/wellbeing_store.dart';
 
 class MoodCheckInSheet extends StatefulWidget {
-  const MoodCheckInSheet({super.key, required this.store});
+  const MoodCheckInSheet({super.key, required this.store, this.record});
 
   final WellbeingStore store;
+  final MoodRecord? record;
 
   @override
   State<MoodCheckInSheet> createState() => _MoodCheckInSheetState();
@@ -20,6 +21,17 @@ class _MoodCheckInSheetState extends State<MoodCheckInSheet> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    final record = widget.record;
+    _valence = record?.valence;
+    _energy = record?.energy;
+    _emotion = record?.emotion;
+    _context = record?.context;
+    _note.text = record?.note ?? '';
+  }
+
+  @override
   void dispose() {
     _note.dispose();
     super.dispose();
@@ -32,11 +44,13 @@ class _MoodCheckInSheetState extends State<MoodCheckInSheet> {
     }
     try {
       await widget.store.saveMood(
+        id: widget.record?.id,
         valence: _valence!,
         energy: _energy,
         emotion: _emotion,
         context: _context,
         note: _note.text,
+        recordedAt: widget.record?.recordedAt,
       );
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -60,7 +74,7 @@ class _MoodCheckInSheetState extends State<MoodCheckInSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Catat suasana',
+              widget.record == null ? 'Catat suasana' : 'Ubah suasana',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),

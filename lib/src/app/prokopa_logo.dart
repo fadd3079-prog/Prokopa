@@ -23,7 +23,8 @@ class ProkopaLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveAsset = asset ??
+    final effectiveAsset =
+        asset ??
         (Theme.of(context).brightness == Brightness.dark
             ? BrandConstants.logoDark
             : BrandConstants.logoLight);

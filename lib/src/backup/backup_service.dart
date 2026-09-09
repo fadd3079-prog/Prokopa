@@ -16,11 +16,13 @@ class BackupFormatException implements Exception {
 class BackupPreview {
   const BackupPreview({
     required this.createdAt,
+    required this.appVersion,
     required this.schemaVersion,
     required this.counts,
   });
 
   final DateTime createdAt;
+  final String appVersion;
   final int schemaVersion;
   final Map<String, int> counts;
 }
@@ -29,6 +31,8 @@ class BackupService {
   BackupService(this._database);
 
   static const formatVersion = 1;
+  static const appVersion = '0.1.0';
+  static const _minimumSupportedBackupSchemaVersion = 2;
 
   static const _tables = [
     ('application_settings', 'key'),
@@ -52,12 +56,20 @@ class BackupService {
   Future<String> export() async {
     final tables = <String, List<Map<String, Object?>>>{};
     for (final table in _tables) {
-      tables[table.$1] = await _database.query(table.$1, orderBy: table.$2);
+      final rows = await _database.query(table.$1, orderBy: table.$2);
+      tables[table.$1] = table.$1 == 'application_settings'
+          ? rows
+                .where(
+                  (row) => !(row['key']! as String).startsWith('app_lock_'),
+                )
+                .toList()
+          : rows;
     }
     final payload = {'tables': tables};
     final encodedPayload = jsonEncode(payload);
     final envelope = {
       'formatVersion': formatVersion,
+      'appVersion': appVersion,
       'schemaVersion': databaseSchemaVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'deviceTimezone': DateTime.now().timeZoneName,
@@ -74,6 +86,7 @@ class BackupService {
             as Map<String, List<Map<String, Object?>>>;
     return BackupPreview(
       createdAt: DateTime.parse(envelope['createdAt']! as String),
+      appVersion: envelope['appVersion']! as String,
       schemaVersion: envelope['schemaVersion']! as int,
       counts: {
         for (final table in _tables)
@@ -97,6 +110,10 @@ class BackupService {
           await transaction.insert(table.$1, row);
         }
       }
+      final references = await transaction.rawQuery('PRAGMA foreign_key_check');
+      if (references.isNotEmpty) {
+        throw const BackupFormatException('Relasi data backup tidak valid.');
+      }
     });
   }
 
@@ -111,12 +128,15 @@ class BackupService {
       throw const BackupFormatException('Format backup tidak valid.');
     }
     final format = decoded['formatVersion'];
+    final app = decoded['appVersion'];
     final schema = decoded['schemaVersion'];
     final createdAt = decoded['createdAt'];
     final checksum = decoded['checksum'];
     final payload = decoded['payload'];
     if (format != formatVersion ||
+        (app != null && app is! String) ||
         schema is! int ||
+        schema < _minimumSupportedBackupSchemaVersion ||
         schema > databaseSchemaVersion ||
         createdAt is! String ||
         checksum is! String ||
@@ -131,8 +151,13 @@ class BackupService {
     }
     final tables = <String, List<Map<String, Object?>>>{};
     final rawTables = payload['tables'] as Map;
+    var missingRecoveries = false;
     for (final table in _tables) {
       final rawRows = rawTables[table.$1];
+      if (rawRows == null && schema < 3 && table.$1 == 'habit_recoveries') {
+        missingRecoveries = true;
+        continue;
+      }
       if (rawRows is! List) {
         throw BackupFormatException('Data ${table.$1} tidak valid.');
       }
@@ -152,8 +177,15 @@ class BackupService {
     if (actual != checksum) {
       throw const BackupFormatException('Pemeriksaan integritas backup gagal.');
     }
+    if (missingRecoveries) {
+      tables['habit_recoveries'] = [];
+    }
+    tables['application_settings']!.removeWhere(
+      (row) => (row['key']! as String).startsWith('app_lock_'),
+    );
     return {
       'formatVersion': format,
+      'appVersion': app ?? 'Versi sebelumnya',
       'schemaVersion': schema,
       'createdAt': createdAt,
       'payload': {'tables': tables},

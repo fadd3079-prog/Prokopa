@@ -20,6 +20,16 @@ class LocalNotificationService {
         false;
   }
 
+  Future<bool> areNotificationsEnabled() async {
+    await _initialize();
+    return await _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.areNotificationsEnabled() ??
+        false;
+  }
+
   Future<void> scheduleDaily({
     required int id,
     required int hour,
@@ -62,6 +72,11 @@ class LocalNotificationService {
   Future<void> cancel(int id) async {
     await _initialize();
     await _plugin.cancel(id: id);
+  }
+
+  Future<void> cancelAll() async {
+    await _initialize();
+    await _plugin.cancelAll();
   }
 
   Future<void> scheduleWeekly({

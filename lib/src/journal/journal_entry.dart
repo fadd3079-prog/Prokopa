@@ -51,6 +51,7 @@ class JournalEntry {
     String? body,
     String? title,
     String? mood,
+    bool clearMood = false,
     String? energy,
     List<String>? tags,
     Map<String, String>? guidedResponses,
@@ -63,7 +64,7 @@ class JournalEntry {
     type: type,
     body: body ?? this.body,
     title: title ?? this.title,
-    mood: mood ?? this.mood,
+    mood: clearMood ? null : mood ?? this.mood,
     energy: energy ?? this.energy,
     tags: tags ?? this.tags,
     guidedResponses: guidedResponses ?? this.guidedResponses,
@@ -72,4 +73,26 @@ class JournalEntry {
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
+}
+
+class JournalEntryPreview {
+  const JournalEntryPreview({
+    required this.id,
+    required this.date,
+    required this.type,
+    required this.bodyPreview,
+    required this.status,
+    required this.updatedAt,
+    this.title,
+    this.mood,
+  });
+
+  final String id;
+  final DateTime date;
+  final JournalEntryType type;
+  final String bodyPreview;
+  final String? title;
+  final String? mood;
+  final JournalEntryStatus status;
+  final DateTime updatedAt;
 }

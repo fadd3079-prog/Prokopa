@@ -51,11 +51,13 @@ class JournalStore {
     return rows.isEmpty ? null : _fromRow(rows.single);
   }
 
-  Future<List<JournalEntry>> list({
+  Future<List<JournalEntryPreview>> list({
     String query = '',
     JournalEntryType? type,
     String? mood,
     String? tag,
+    int limit = 40,
+    int offset = 0,
   }) async {
     final predicates = <String>[];
     final arguments = <Object?>[];
@@ -78,11 +80,23 @@ class JournalStore {
     }
     final rows = await _database.query(
       'journal_entries',
+      columns: const [
+        'id',
+        'entry_date',
+        'type',
+        'title',
+        'substr(body, 1, 240) AS body_preview',
+        'mood',
+        'status',
+        'updated_at',
+      ],
       where: predicates.isEmpty ? null : predicates.join(' AND '),
       whereArgs: arguments.isEmpty ? null : arguments,
       orderBy: 'updated_at DESC',
+      limit: limit,
+      offset: offset,
     );
-    return rows.map(_fromRow).toList();
+    return rows.map(_previewFromRow).toList();
   }
 
   Future<void> delete(String id) {
@@ -129,6 +143,18 @@ class JournalStore {
     createdAt: DateTime.parse(row['created_at']! as String),
     updatedAt: DateTime.parse(row['updated_at']! as String),
   );
+
+  JournalEntryPreview _previewFromRow(Map<String, Object?> row) =>
+      JournalEntryPreview(
+        id: row['id']! as String,
+        date: localDateFromKey(row['entry_date']! as String),
+        type: JournalEntryTypeValue.fromValue(row['type']! as String),
+        title: row['title'] as String?,
+        bodyPreview: row['body_preview']! as String,
+        mood: row['mood'] as String?,
+        status: JournalEntryStatusValue.fromValue(row['status']! as String),
+        updatedAt: DateTime.parse(row['updated_at']! as String),
+      );
 
   String? _blank(String? value) {
     final normalized = value?.trim();

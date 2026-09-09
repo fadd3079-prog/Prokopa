@@ -95,10 +95,14 @@ class ProgressStore {
     required DateTime start,
     required DateTime end,
     String? reflection,
+    String? adjustment,
   }) async {
     final snapshot = await this.snapshot(start, end);
     final mood = await _moodSummary(start, end);
     final sleep = await _sleepSummary(start, end);
+    final journalCount = await _journalCount(start, end);
+    final habitSummary = await _habitSummary(start, end);
+    final recoveries = await _recoveryCount(start, end);
     final now = DateTime.now();
     final prior = await loadReview(type: type, start: start);
     final record = ReviewRecord(
@@ -112,9 +116,15 @@ class ProgressStore {
         'planned': snapshot.planned,
         'skipped': snapshot.skipped,
         'missed': snapshot.missed,
-        'moodCount': mood,
+        'moodCount': mood.$1,
+        'averageMood': mood.$2,
         'sleepCount': sleep.$1,
         'averageSleepMinutes': sleep.$2,
+        'journalCount': journalCount,
+        'mostConsistentHabit': habitSummary.$1,
+        'hardestHabit': habitSummary.$2,
+        'recoveryCount': recoveries,
+        'adjustment': _blank(adjustment),
       },
       createdAt: prior?.createdAt ?? now,
       updatedAt: now,
@@ -175,14 +185,85 @@ class ProgressStore {
     return (rows.length, total / rows.length);
   }
 
-  Future<int> _moodSummary(DateTime start, DateTime end) async {
-    final value = Sqflite.firstIntValue(
-      await _database.rawQuery(
-        'SELECT COUNT(*) FROM mood_records WHERE record_date BETWEEN ? AND ?',
-        [localDateKey(start), localDateKey(end)],
-      ),
+  Future<(int, double?)> _moodSummary(DateTime start, DateTime end) async {
+    final rows = await _database.query(
+      'mood_records',
+      columns: ['valence'],
+      where: 'record_date BETWEEN ? AND ?',
+      whereArgs: [localDateKey(start), localDateKey(end)],
     );
-    return value ?? 0;
+    if (rows.isEmpty) {
+      return (0, null);
+    }
+    final total = rows.fold<int>(0, (sum, row) {
+      return sum +
+          switch (row['valence']! as String) {
+            'very_low' => 1,
+            'low' => 2,
+            'neutral' => 3,
+            'good' => 4,
+            'very_good' => 5,
+            _ => 3,
+          };
+    });
+    return (rows.length, total / rows.length);
+  }
+
+  Future<int> _journalCount(DateTime start, DateTime end) async {
+    return Sqflite.firstIntValue(
+          await _database.rawQuery(
+            "SELECT COUNT(*) FROM journal_entries WHERE status = 'saved' AND entry_date BETWEEN ? AND ?",
+            [localDateKey(start), localDateKey(end)],
+          ),
+        ) ??
+        0;
+  }
+
+  Future<(String?, String?)> _habitSummary(DateTime start, DateTime end) async {
+    final rows = await _database.rawQuery(
+      '''
+      SELECT habits.title,
+        SUM(CASE WHEN habit_executions.state = 'completed' THEN 1 ELSE 0 END) AS completed,
+        COUNT(*) AS planned
+      FROM habit_executions
+      INNER JOIN habits ON habits.id = habit_executions.habit_id
+      WHERE habit_executions.planned_date BETWEEN ? AND ?
+      GROUP BY habits.id, habits.title
+      HAVING COUNT(*) > 0
+      ''',
+      [localDateKey(start), localDateKey(end)],
+    );
+    if (rows.isEmpty) {
+      return (null, null);
+    }
+    final ordered = [...rows]
+      ..sort((left, right) {
+        final leftRate =
+            (left['completed']! as int) / (left['planned']! as int);
+        final rightRate =
+            (right['completed']! as int) / (right['planned']! as int);
+        return rightRate.compareTo(leftRate);
+      });
+    return (
+      ordered.first['title']! as String,
+      ordered.last['title']! as String,
+    );
+  }
+
+  Future<int> _recoveryCount(DateTime start, DateTime end) async {
+    return Sqflite.firstIntValue(
+          await _database.rawQuery(
+            '''
+            SELECT COUNT(*) FROM habit_recoveries
+            WHERE action = 'continue' AND recorded_at >= ? AND recorded_at < ?
+            ''',
+            [
+              utcTimestamp(start),
+              utcTimestamp(end.add(const Duration(days: 1))),
+            ],
+          ),
+        ) ??
+        0;
   }
 
   String _combinedCalendarState(String? current, String next) {

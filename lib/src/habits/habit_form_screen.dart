@@ -2,12 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:prokopa/src/core/date/local_date.dart';
 import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
+import 'package:prokopa/src/notifications/habit_reminder_service.dart';
 
 class HabitFormScreen extends StatefulWidget {
-  const HabitFormScreen({super.key, required this.store, this.habit});
+  const HabitFormScreen({
+    super.key,
+    required this.store,
+    this.habit,
+    this.reminderService,
+  });
 
   final HabitStore store;
   final Habit? habit;
+  final HabitReminderService? reminderService;
 
   @override
   State<HabitFormScreen> createState() => _HabitFormScreenState();
@@ -29,6 +36,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
   String? _icon;
   String? _color;
   TimeOfDay? _reminderTime;
+  Set<int> _reminderDays = {};
   var _saving = false;
   String? _error;
 
@@ -51,6 +59,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     _icon = draft?.icon;
     _color = draft?.color;
     _reminderTime = _timeFromValue(draft?.reminderTime);
+    _reminderDays = {...(draft?.reminderDays ?? const <int>{})};
   }
 
   @override
@@ -82,6 +91,9 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     reminderTime: _reminderTime == null
         ? null
         : '${_reminderTime!.hour.toString().padLeft(2, '0')}:${_reminderTime!.minute.toString().padLeft(2, '0')}',
+    reminderDays: _frequency == HabitFrequency.weeklyTarget
+        ? _reminderDays
+        : const {},
     startDate: _startDate,
     endDate: _endDate,
   );
@@ -92,10 +104,21 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
       _error = null;
     });
     try {
-      if (widget.habit == null) {
-        await widget.store.create(_draft());
-      } else {
-        await widget.store.update(widget.habit!, _draft());
+      final habit = widget.habit == null
+          ? await widget.store.create(_draft())
+          : await widget.store.update(widget.habit!, _draft());
+      final reminder = widget.reminderService == null
+          ? HabitReminderResult.disabled
+          : await widget.reminderService!.synchronize(habit);
+      if (reminder == HabitReminderResult.permissionUnavailable ||
+          reminder == HabitReminderResult.failed) {
+        setState(() {
+          _saving = false;
+          _error = reminder == HabitReminderResult.permissionUnavailable
+              ? 'Kebiasaan tersimpan. Izin pengingat belum diberikan.'
+              : 'Kebiasaan tersimpan. Pengingat belum dapat dijadwalkan.';
+        });
+        return;
       }
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -360,6 +383,34 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
                     ),
               onTap: _saving ? null : _pickReminderTime,
             ),
+            if (_frequency == HabitFrequency.weeklyTarget &&
+                _reminderTime != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Hari pengingat',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final day in _weekdays)
+                    FilterChip(
+                      label: Text(day.label),
+                      selected: _reminderDays.contains(day.day),
+                      onSelected: _saving
+                          ? null
+                          : (selected) => setState(() {
+                              if (selected) {
+                                _reminderDays.add(day.day);
+                              } else {
+                                _reminderDays.remove(day.day);
+                              }
+                            }),
+                    ),
+                ],
+              ),
+            ],
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),

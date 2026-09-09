@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:prokopa/src/achievements/achievement_store.dart';
+import 'package:prokopa/src/achievements/achievements_screen.dart';
 import 'package:prokopa/src/backup/backup_screen.dart';
 import 'package:prokopa/src/backup/backup_service.dart';
 import 'package:prokopa/src/profile/local_profile.dart';
@@ -6,6 +8,7 @@ import 'package:prokopa/src/profile/profile_store.dart';
 import 'package:prokopa/src/privacy/app_lock_store.dart';
 import 'package:prokopa/src/privacy/privacy_screen.dart';
 import 'package:prokopa/src/notifications/local_notification_service.dart';
+import 'package:prokopa/src/notifications/habit_reminder_service.dart';
 import 'package:prokopa/src/notifications/notification_store.dart';
 import 'package:prokopa/src/notifications/notifications_screen.dart';
 import 'package:prokopa/src/app/prokopa_logo.dart';
@@ -21,6 +24,9 @@ class ProfileScreen extends StatefulWidget {
     this.onDataReset,
     this.notificationStore,
     this.notificationService,
+    this.achievementStore,
+    this.onDataRestored,
+    this.habitReminderService,
   });
 
   final LocalProfile profile;
@@ -31,6 +37,9 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback? onDataReset;
   final NotificationStore? notificationStore;
   final LocalNotificationService? notificationService;
+  final AchievementStore? achievementStore;
+  final Future<String?> Function()? onDataRestored;
+  final HabitReminderService? habitReminderService;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -129,7 +138,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             OutlinedButton(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => BackupScreen(backup: widget.backupService!),
+                  builder: (_) => BackupScreen(
+                    backup: widget.backupService!,
+                    notificationService: widget.notificationService,
+                    onRestored: widget.onDataRestored,
+                  ),
                 ),
               ),
               child: const Text('Backup data'),
@@ -143,6 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   builder: (_) => PrivacyScreen(
                     store: widget.appLockStore!,
                     onDataReset: widget.onDataReset!,
+                    notificationService: widget.notificationService,
                   ),
                 ),
               ),
@@ -158,10 +172,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   builder: (_) => NotificationsScreen(
                     store: widget.notificationStore!,
                     service: widget.notificationService!,
+                    habitReminders: widget.habitReminderService,
                   ),
                 ),
               ),
               child: const Text('Pengingat'),
+            ),
+          ],
+          if (widget.achievementStore != null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      AchievementsScreen(store: widget.achievementStore!),
+                ),
+              ),
+              child: const Text('Pencapaian'),
             ),
           ],
           const SizedBox(height: 32),
@@ -174,24 +201,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Prokopa',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'Versi 0.1.0 (Habits and Journaling)',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Ruang kecil untuk kebiasaan dan refleksi harian.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -208,7 +234,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         TextField(
           controller: _name,
           enabled: !_saving,
-          maxLength: 40,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(labelText: 'Nama'),
         ),

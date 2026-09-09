@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:prokopa/src/notifications/habit_reminder_service.dart';
 import 'package:prokopa/src/notifications/local_notification_service.dart';
 import 'package:prokopa/src/notifications/notification_store.dart';
 
@@ -7,10 +8,12 @@ class NotificationsScreen extends StatefulWidget {
     super.key,
     required this.store,
     required this.service,
+    this.habitReminders,
   });
 
   final NotificationStore store;
   final LocalNotificationService service;
+  final HabitReminderService? habitReminders;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -82,12 +85,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         }
         return;
       }
-      if (_inQuietPeriod(time)) {
-        if (mounted) {
-          setState(() => _message = 'Pilih waktu di luar periode hening.');
-        }
-        return;
-      }
       await _schedule(reminder, time);
     } else {
       await widget.service.cancel(reminder.notificationId);
@@ -115,10 +112,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     final value =
         '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}';
-    if (_inQuietPeriod(value)) {
-      setState(() => _message = 'Pilih waktu di luar periode hening.');
-      return;
-    }
     if (current.enabled) {
       await _schedule(reminder, value);
     }
@@ -138,26 +131,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     reminder,
     String time,
   ) async {
-    final value = _timeOfDay(time);
-    if (reminder.id == 'weekly_review') {
-      await widget.service.scheduleWeekly(
-        id: reminder.notificationId,
-        weekday: DateTime.sunday,
-        hour: value.hour,
-        minute: value.minute,
-        title: 'Tinjauan mingguan',
-        body: 'Luangkan waktu bila kamu ingin meninjau minggu ini.',
-      );
-      return;
-    }
-    await widget.service.scheduleDaily(
-      id: reminder.notificationId,
-      hour: value.hour,
-      minute: value.minute,
-      title: reminder.label,
-      body: reminder.id == 'journal'
-          ? 'Luangkan waktu bila kamu ingin menulis.'
-          : 'Siapkan waktu istirahat bila sesuai untukmu.',
+    await widget.store.schedule(
+      NotificationPreference(
+        id: reminder.id,
+        kind: reminder.id,
+        enabled: true,
+        timeOfDay: time,
+      ),
+      widget.service,
     );
   }
 
@@ -181,28 +162,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       end: _format(end),
     );
     await _reload();
+    await _rescheduleEnabled();
   }
 
-  bool _inQuietPeriod(String value) {
-    if (_quiet.$1 == null || _quiet.$2 == null) {
-      return false;
+  Future<void> _clearQuietPeriod() async {
+    await widget.store.saveQuietPeriod();
+    await _reload();
+    await _rescheduleEnabled();
+  }
+
+  Future<void> _rescheduleEnabled() async {
+    for (final reminder in _reminders) {
+      final preference = _preferences[reminder.id];
+      if (preference?.enabled == true) {
+        await _schedule(
+          reminder,
+          preference!.timeOfDay ?? reminder.defaultTime,
+        );
+      }
     }
-    final minute = _minutes(value);
-    final start = _minutes(_quiet.$1!);
-    final end = _minutes(_quiet.$2!);
-    return start <= end
-        ? minute >= start && minute < end
-        : minute >= start || minute < end;
+    await widget.habitReminders?.rescheduleEnabled();
   }
 
   TimeOfDay _timeOfDay(String value) {
     final parts = value.split(':');
     return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-  }
-
-  int _minutes(String value) {
-    final time = _timeOfDay(value);
-    return time.hour * 60 + time.minute;
   }
 
   String _format(TimeOfDay value) =>
@@ -246,7 +230,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     : '${_quiet.$1} sampai ${_quiet.$2}',
               ),
               onTap: _setQuietPeriod,
-              trailing: const Icon(Icons.nights_stay_outlined),
+              trailing: _quiet.$1 == null
+                  ? const Icon(Icons.nights_stay_outlined)
+                  : IconButton(
+                      onPressed: _clearQuietPeriod,
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Hapus periode hening',
+                    ),
             ),
             if (_message != null)
               Padding(

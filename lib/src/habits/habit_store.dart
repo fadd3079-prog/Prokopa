@@ -158,6 +158,60 @@ class HabitStore {
           whereArgs: [rows.single['id']],
         );
       }
+      final interruption = await transaction.query(
+        'habit_executions',
+        columns: ['planned_date'],
+        where: 'habit_id = ? AND state = ? AND planned_date < ?',
+        whereArgs: [habit.id, HabitExecutionState.missed.value, key],
+        orderBy: 'planned_date DESC',
+        limit: 1,
+      );
+      if (interruption.isNotEmpty) {
+        final recovered = await transaction.query(
+          'habit_recoveries',
+          columns: ['id'],
+          where: 'habit_id = ? AND action = ? AND missed_planned_date = ?',
+          whereArgs: [
+            habit.id,
+            HabitRecoveryAction.continueHabit.value,
+            interruption.single['planned_date'],
+          ],
+          limit: 1,
+        );
+        if (recovered.isEmpty) {
+          await transaction.insert('habit_recoveries', {
+            'id': newLocalId(),
+            'habit_id': habit.id,
+            'action': HabitRecoveryAction.continueHabit.value,
+            'missed_planned_date': interruption.single['planned_date'],
+            'recorded_at': now,
+          });
+        }
+      }
+    });
+  }
+
+  Future<void> undo(Habit habit, {DateTime? date}) async {
+    final day = date ?? DateTime.now();
+    _ensureNotFuture(day);
+    final key = localDateKey(day);
+    await _database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'habit_executions',
+        where: 'habit_id = ? AND planned_date = ?',
+        whereArgs: [habit.id, key],
+        limit: 1,
+      );
+      final state = rows.singleOrNull?['state'];
+      if (state != HabitExecutionState.completed.value &&
+          state != HabitExecutionState.skipped.value) {
+        throw StateError('Only completed or skipped work can be undone.');
+      }
+      await transaction.delete(
+        'habit_executions',
+        where: 'id = ?',
+        whereArgs: [rows.single['id']],
+      );
     });
   }
 
@@ -390,9 +444,10 @@ class HabitStore {
 
   Future<int> recoveryCount(Habit habit) {
     return _database
-        .rawQuery('SELECT COUNT(*) FROM habit_recoveries WHERE habit_id = ?', [
-          habit.id,
-        ])
+        .rawQuery(
+          'SELECT COUNT(*) FROM habit_recoveries WHERE habit_id = ? AND action = ?',
+          [habit.id, HabitRecoveryAction.continueHabit.value],
+        )
         .then((rows) => Sqflite.firstIntValue(rows) ?? 0);
   }
 
@@ -505,6 +560,179 @@ class HabitStore {
       return total;
     }
     return total;
+  }
+
+  Future<int> longestDailyStreak(Habit habit, {DateTime? now}) async {
+    final day = _localDay(now ?? DateTime.now());
+    final records = await history(habit);
+    final byDate = {
+      for (final record in records) localDateKey(record.plannedDate): record,
+    };
+    final pauses = await _pausesFor([habit.id]);
+    final ranges = await _configurationRanges(habit.id);
+    if (ranges.isEmpty) {
+      return 0;
+    }
+    var longest = 0;
+    var current = 0;
+    for (
+      var cursor = ranges.first.effectiveFrom;
+      !cursor.isAfter(day);
+      cursor = cursor.add(const Duration(days: 1))
+    ) {
+      final draft = _draftFromRanges(ranges, cursor);
+      if (draft == null || draft.frequency == HabitFrequency.weeklyTarget) {
+        continue;
+      }
+      if (_isPausedOn(pauses[habit.id] ?? const [], cursor) ||
+          !isHabitScheduledOn(draft, cursor)) {
+        continue;
+      }
+      if (byDate[localDateKey(cursor)]?.state ==
+          HabitExecutionState.completed) {
+        current++;
+        if (current > longest) {
+          longest = current;
+        }
+      } else if (cursor != day) {
+        current = 0;
+      }
+    }
+    return longest;
+  }
+
+  Future<int> weeklyStreak(Habit habit, {DateTime? now}) async {
+    final day = _localDay(now ?? DateTime.now());
+    final draft = await _draftForDate(habit, day);
+    if (draft.frequency != HabitFrequency.weeklyTarget) {
+      return 0;
+    }
+    final history = await this.history(habit);
+    final ranges = await _configurationRanges(habit.id);
+    if (ranges.isEmpty) {
+      return 0;
+    }
+    var streak = 0;
+    var week = startOfWeek(day);
+    while (!week.isBefore(ranges.first.effectiveFrom)) {
+      final weeklyDraft = _draftFromRanges(ranges, week);
+      if (weeklyDraft?.frequency != HabitFrequency.weeklyTarget) {
+        week = week.subtract(const Duration(days: 7));
+        continue;
+      }
+      final target = await _weeklyTargetForPeriod(
+        habit.withDraft(weeklyDraft!),
+        week,
+      );
+      if (target == 0) {
+        week = week.subtract(const Duration(days: 7));
+        continue;
+      }
+      final end = endOfWeek(week);
+      final completed = history.where((record) {
+        return record.state == HabitExecutionState.completed &&
+            !record.plannedDate.isBefore(week) &&
+            !record.plannedDate.isAfter(end);
+      }).length;
+      if (completed >= target) {
+        streak++;
+      } else if (week != startOfWeek(day) || !day.isBefore(end)) {
+        break;
+      }
+      week = week.subtract(const Duration(days: 7));
+    }
+    return streak;
+  }
+
+  Future<int> longestWeeklyStreak(Habit habit, {DateTime? now}) async {
+    final day = _localDay(now ?? DateTime.now());
+    final draft = await _draftForDate(habit, day);
+    if (draft.frequency != HabitFrequency.weeklyTarget) {
+      return 0;
+    }
+    final history = await this.history(habit);
+    final ranges = await _configurationRanges(habit.id);
+    if (ranges.isEmpty) {
+      return 0;
+    }
+    var longest = 0;
+    var current = 0;
+    for (
+      var week = startOfWeek(ranges.first.effectiveFrom);
+      !week.isAfter(startOfWeek(day));
+      week = week.add(const Duration(days: 7))
+    ) {
+      final weeklyDraft = _draftFromRanges(ranges, week);
+      if (weeklyDraft?.frequency != HabitFrequency.weeklyTarget) {
+        continue;
+      }
+      final target = await _weeklyTargetForPeriod(
+        habit.withDraft(weeklyDraft!),
+        week,
+      );
+      if (target == 0) {
+        continue;
+      }
+      final completed = history.where((record) {
+        return record.state == HabitExecutionState.completed &&
+            !record.plannedDate.isBefore(week) &&
+            !record.plannedDate.isAfter(endOfWeek(week));
+      }).length;
+      if (completed >= target) {
+        current++;
+        if (current > longest) {
+          longest = current;
+        }
+      } else if (week != startOfWeek(day) || !day.isBefore(endOfWeek(week))) {
+        current = 0;
+      }
+    }
+    return longest;
+  }
+
+  Future<List<HabitProgress>> progress({DateTime? now}) async {
+    final day = _localDay(now ?? DateTime.now());
+    final habits = await list(includeArchived: true);
+    return Future.wait(
+      habits.map((habit) async {
+        final history = await this.history(habit);
+        final repetitions = history
+            .where((record) => record.state == HabitExecutionState.completed)
+            .length;
+        final recoveries = await recoveryCount(habit);
+        final draft = await _draftForDate(habit, day);
+        if (draft.frequency == HabitFrequency.weeklyTarget) {
+          final weekStart = startOfWeek(day);
+          final weekEnd = endOfWeek(day);
+          final completed = history.where((record) {
+            return record.state == HabitExecutionState.completed &&
+                !record.plannedDate.isBefore(weekStart) &&
+                !record.plannedDate.isAfter(weekEnd);
+          }).length;
+          final target = await _weeklyTargetForPeriod(
+            habit.withDraft(draft),
+            day,
+          );
+          final streak = await weeklyStreak(habit, now: day);
+          return HabitProgress(
+            habit: habit.withDraft(draft),
+            repetitions: repetitions,
+            currentStreak: streak,
+            longestStreak: await longestWeeklyStreak(habit, now: day),
+            recoveryCount: recoveries,
+            weekCompleted: completed,
+            weekTarget: target,
+          );
+        }
+        return HabitProgress(
+          habit: habit.withDraft(draft),
+          repetitions: repetitions,
+          currentStreak: await dailyStreak(habit, now: day),
+          longestStreak: await longestDailyStreak(habit, now: day),
+          recoveryCount: recoveries,
+        );
+      }),
+    );
   }
 
   Future<void> reconcileMissed({required DateTime before}) async {
@@ -645,6 +873,9 @@ class HabitStore {
     cueAction: values['cueAction'] as String?,
     minimumVersion: values['minimumVersion'] as String?,
     reminderTime: values['reminderTime'] as String?,
+    reminderDays: (values['reminderDays'] as List? ?? const [])
+        .cast<int>()
+        .toSet(),
     startDate: localDateFromKey(values['startDate']! as String),
     endDate: values['endDate'] == null
         ? null
@@ -733,6 +964,7 @@ class HabitStore {
     cueAction: _blankToNull(draft.cueAction),
     minimumVersion: _blankToNull(draft.minimumVersion),
     reminderTime: _blankToNull(draft.reminderTime),
+    reminderDays: draft.reminderDays,
     startDate: DateTime(
       draft.startDate.year,
       draft.startDate.month,
@@ -790,6 +1022,32 @@ class HabitStore {
         'End date precedes start date.',
       );
     }
+    if (draft.reminderTime != null &&
+        !RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(draft.reminderTime!)) {
+      throw ArgumentError.value(
+        draft.reminderTime,
+        'reminderTime',
+        'Reminder time is invalid.',
+      );
+    }
+    if (draft.frequency == HabitFrequency.weeklyTarget &&
+        draft.reminderTime != null &&
+        draft.reminderDays.isEmpty) {
+      throw ArgumentError.value(
+        draft.reminderDays,
+        'reminderDays',
+        'Weekly reminders need at least one day.',
+      );
+    }
+    if (draft.reminderDays.any(
+      (day) => day < DateTime.monday || day > DateTime.sunday,
+    )) {
+      throw ArgumentError.value(
+        draft.reminderDays,
+        'reminderDays',
+        'Invalid reminder weekday.',
+      );
+    }
   }
 
   Map<String, Object?> _habitValues(Habit habit) {
@@ -813,6 +1071,9 @@ class HabitStore {
       'cue_action': draft.cueAction,
       'minimum_version': draft.minimumVersion,
       'reminder_time': draft.reminderTime,
+      'reminder_days': draft.reminderDays.isEmpty
+          ? null
+          : jsonEncode(draft.reminderDays.toList()..sort()),
       'start_date': localDateKey(draft.startDate),
       'end_date': draft.endDate == null ? null : localDateKey(draft.endDate!),
       'state': habit.state.value,
@@ -841,6 +1102,7 @@ class HabitStore {
     'cueAction': draft.cueAction,
     'minimumVersion': draft.minimumVersion,
     'reminderTime': draft.reminderTime,
+    'reminderDays': draft.reminderDays.toList()..sort(),
     'startDate': localDateKey(draft.startDate),
     'endDate': draft.endDate == null ? null : localDateKey(draft.endDate!),
   };
@@ -870,6 +1132,11 @@ class HabitStore {
         cueAction: row['cue_action'] as String?,
         minimumVersion: row['minimum_version'] as String?,
         reminderTime: row['reminder_time'] as String?,
+        reminderDays: row['reminder_days'] == null
+            ? const {}
+            : (jsonDecode(row['reminder_days']! as String) as List)
+                  .cast<int>()
+                  .toSet(),
         startDate: localDateFromKey(row['start_date']! as String),
         endDate: row['end_date'] == null
             ? null

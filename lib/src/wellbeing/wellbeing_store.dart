@@ -49,6 +49,7 @@ class WellbeingStore {
   final Database _database;
 
   Future<MoodRecord> saveMood({
+    String? id,
     required MoodValence valence,
     MoodEnergy? energy,
     MoodEmotion? emotion,
@@ -58,7 +59,7 @@ class WellbeingStore {
   }) async {
     final time = recordedAt ?? DateTime.now();
     final record = MoodRecord(
-      id: newLocalId(),
+      id: id ?? newLocalId(),
       recordedAt: time,
       valence: valence,
       energy: energy,
@@ -75,8 +76,12 @@ class WellbeingStore {
       'emotion': record.emotion?.name,
       'context': record.context?.name,
       'note': record.note,
-    });
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
     return record;
+  }
+
+  Future<void> deleteMood(String id) {
+    return _database.delete('mood_records', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<MoodRecord>> listMood({DateTime? from, DateTime? to}) async {
@@ -99,6 +104,18 @@ class WellbeingStore {
     return rows.map(_moodFromRow).toList();
   }
 
+  Future<double?> averageMood({DateTime? from, DateTime? to}) async {
+    final records = await listMood(from: from, to: to);
+    if (records.isEmpty) {
+      return null;
+    }
+    final total = records.fold<int>(
+      0,
+      (sum, record) => sum + _moodScore(record.valence),
+    );
+    return total / records.length;
+  }
+
   Future<SleepRecord> saveSleep({
     String? id,
     required DateTime start,
@@ -115,13 +132,24 @@ class WellbeingStore {
       );
     }
     final now = DateTime.now();
+    final previous = id == null
+        ? null
+        : await _database.query(
+            'sleep_records',
+            columns: ['created_at'],
+            where: 'id = ?',
+            whereArgs: [id],
+            limit: 1,
+          );
     final record = SleepRecord(
       id: id ?? newLocalId(),
       start: start,
       end: end,
       quality: quality,
       note: _blank(note),
-      createdAt: now,
+      createdAt: previous == null || previous.isEmpty
+          ? now
+          : DateTime.parse(previous.single['created_at']! as String),
       updatedAt: now,
     );
     await _database.insert('sleep_records', {
@@ -173,6 +201,34 @@ class WellbeingStore {
         records.length;
   }
 
+  Future<double?> averageSleepQuality({DateTime? from, DateTime? to}) async {
+    final records = await listSleep(from: from, to: to);
+    if (records.isEmpty) {
+      return null;
+    }
+    final total = records.fold<int>(
+      0,
+      (sum, record) => sum + _qualityScore(record.quality),
+    );
+    return total / records.length;
+  }
+
+  Future<double?> sleepConsistency({DateTime? from, DateTime? to}) async {
+    final records = await listSleep(from: from, to: to);
+    if (records.isEmpty) {
+      return null;
+    }
+    final days = records.map((record) => localDateKey(record.end)).toSet();
+    final first = records
+        .map((record) => record.end)
+        .reduce((left, right) => left.isBefore(right) ? left : right);
+    final last = records
+        .map((record) => record.end)
+        .reduce((left, right) => left.isAfter(right) ? left : right);
+    final range = last.difference(first).inDays + 1;
+    return days.length / range;
+  }
+
   MoodRecord _moodFromRow(Map<String, Object?> row) => MoodRecord(
     id: row['id']! as String,
     recordedAt: DateTime.parse(row['recorded_at']! as String),
@@ -203,4 +259,19 @@ class WellbeingStore {
     final normalized = value?.trim();
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
+
+  int _moodScore(MoodValence value) => switch (value) {
+    MoodValence.veryLow => 1,
+    MoodValence.low => 2,
+    MoodValence.neutral => 3,
+    MoodValence.good => 4,
+    MoodValence.veryGood => 5,
+  };
+
+  int _qualityScore(SleepQuality value) => switch (value) {
+    SleepQuality.poor => 1,
+    SleepQuality.fair => 2,
+    SleepQuality.good => 3,
+    SleepQuality.excellent => 4,
+  };
 }

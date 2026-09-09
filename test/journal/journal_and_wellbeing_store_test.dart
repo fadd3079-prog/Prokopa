@@ -79,6 +79,30 @@ void main() {
     expect(record.context, MoodContext.exercise);
   });
 
+  test(
+    'mood can be edited and deleted without touching journal data',
+    () async {
+      final stores = await openStores();
+      final created = await stores.wellbeing.saveMood(
+        valence: MoodValence.low,
+        recordedAt: DateTime(2026, 9, 9, 8),
+      );
+
+      await stores.wellbeing.saveMood(
+        id: created.id,
+        valence: MoodValence.good,
+        energy: MoodEnergy.high,
+        recordedAt: created.recordedAt,
+      );
+      final edited = (await stores.wellbeing.listMood()).single;
+      expect(edited.valence, MoodValence.good);
+      expect(edited.energy, MoodEnergy.high);
+
+      await stores.wellbeing.deleteMood(edited.id);
+      expect(await stores.wellbeing.listMood(), isEmpty);
+    },
+  );
+
   test('sleep uses wake date and calculates cross-midnight duration', () async {
     final stores = await openStores();
     final record = await stores.wellbeing.saveSleep(
@@ -106,4 +130,28 @@ void main() {
     );
     expect(await stores.wellbeing.listSleep(), isEmpty);
   });
+
+  test(
+    'sleep updates preserve identity and expose local quality metrics',
+    () async {
+      final stores = await openStores();
+      final record = await stores.wellbeing.saveSleep(
+        start: DateTime(2026, 9, 8, 23),
+        end: DateTime(2026, 9, 9, 6),
+        quality: SleepQuality.fair,
+      );
+
+      final updated = await stores.wellbeing.saveSleep(
+        id: record.id,
+        start: DateTime(2026, 9, 8, 23),
+        end: DateTime(2026, 9, 9, 7),
+        quality: SleepQuality.excellent,
+      );
+
+      expect((await stores.wellbeing.listSleep()), hasLength(1));
+      expect(updated.durationMinutes, 480);
+      expect(await stores.wellbeing.averageSleepQuality(), 4);
+      expect(await stores.wellbeing.sleepConsistency(), 1);
+    },
+  );
 }

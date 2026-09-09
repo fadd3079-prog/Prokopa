@@ -47,12 +47,33 @@ class AppLockStore {
 
   Future<void> enablePin(String pin, {int timeout = 1}) async {
     _validatePin(pin);
+    final previous = await _secureStorage.read(key: _pinKey);
     final salt = List<int>.generate(16, (_) => Random.secure().nextInt(256));
     final encoded =
         '${base64UrlEncode(salt)}:${sha256.convert([...salt, ...utf8.encode(pin)]).toString()}';
     await _secureStorage.write(key: _pinKey, value: encoded);
-    await _saveSetting(_enabledKey, 'true');
-    await _saveSetting(_timeoutKey, timeout.toString());
+    try {
+      final now = utcTimestamp(DateTime.now());
+      await _database.transaction((transaction) async {
+        for (final setting in [
+          (_enabledKey, 'true'),
+          (_timeoutKey, timeout.toString()),
+        ]) {
+          await transaction.insert('application_settings', {
+            'key': setting.$1,
+            'value': setting.$2,
+            'updated_at': now,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
+    } catch (_) {
+      if (previous == null) {
+        await _secureStorage.delete(key: _pinKey);
+      } else {
+        await _secureStorage.write(key: _pinKey, value: previous);
+      }
+      rethrow;
+    }
   }
 
   Future<bool> verifyPin(String pin) async {
@@ -60,10 +81,14 @@ class AppLockStore {
     if (saved == null || !saved.contains(':')) {
       return false;
     }
-    final parts = saved.split(':');
-    final salt = base64Url.decode(parts.first);
-    final actual = sha256.convert([...salt, ...utf8.encode(pin)]).toString();
-    return actual == parts.last;
+    try {
+      final parts = saved.split(':');
+      final salt = base64Url.decode(parts.first);
+      final actual = sha256.convert([...salt, ...utf8.encode(pin)]).toString();
+      return actual == parts.last;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> unlockWithDevice() async {
@@ -89,8 +114,8 @@ class AppLockStore {
   }
 
   Future<void> disable() async {
-    await _secureStorage.delete(key: _pinKey);
     await _saveSetting(_enabledKey, 'false');
+    await _secureStorage.delete(key: _pinKey);
   }
 
   Future<void> deleteAllData() async {

@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prokopa/src/backup/backup_service.dart';
 import 'package:prokopa/src/core/database/app_database.dart';
+import 'package:prokopa/src/core/database/database_migrations.dart';
 import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/profile/local_profile.dart';
@@ -53,6 +54,8 @@ void main() {
     expect(preview.counts['local_profiles'], 1);
     expect(preview.counts['habits'], 1);
     expect(preview.counts['habit_executions'], 1);
+    expect(preview.appVersion, BackupService.appVersion);
+    expect(preview.schemaVersion, databaseSchemaVersion);
 
     await result.database.delete('habits');
     await result.database.delete('local_profiles');
@@ -84,6 +87,58 @@ void main() {
       expect(await result.database.query('habits'), hasLength(1));
     },
   );
+
+  test('backup excludes app lock state and preserves unrelated settings', () async {
+    final result = await openBackup();
+    await result.database.insert('application_settings', {
+      'key': 'app_lock_enabled',
+      'value': 'true',
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await result.database.insert('application_settings', {
+      'key': 'quiet_hours_start',
+      'value': '22:00',
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    final exported = jsonDecode(await result.backup.export()) as Map;
+    final tables =
+        ((exported['payload'] as Map)['tables'] as Map<String, dynamic>);
+    final settings = tables['application_settings'] as List<dynamic>;
+
+    expect(
+      settings.map((row) => (row as Map)['key']),
+      ['quiet_hours_start'],
+    );
+
+    final source = await result.backup.export();
+    await result.database.delete('application_settings');
+    await result.backup.replace(source);
+    final restored = await result.database.query('application_settings');
+    expect(restored.single['key'], 'quiet_hours_start');
+  });
+
+  test('supported older backup schema is normalized before replacement', () async {
+    final result = await openBackup();
+    await addData(result.database);
+    final envelope =
+        jsonDecode(await result.backup.export()) as Map<String, dynamic>;
+    final payload = envelope['payload'] as Map<String, dynamic>;
+    final tables = payload['tables'] as Map<String, dynamic>;
+    envelope['schemaVersion'] = 2;
+    tables.remove('habit_recoveries');
+    envelope['checksum'] = sha256
+        .convert(utf8.encode(jsonEncode(payload)))
+        .toString();
+
+    final preview = result.backup.preview(jsonEncode(envelope));
+    await result.database.delete('habits');
+    await result.backup.replace(jsonEncode(envelope));
+
+    expect(preview.schemaVersion, 2);
+    expect(await result.database.query('habits'), hasLength(1));
+    expect(await result.database.query('habit_recoveries'), isEmpty);
+  });
 
   test(
     'duplicate records fail transactionally without replacing local data',

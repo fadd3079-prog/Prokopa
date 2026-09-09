@@ -29,15 +29,20 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
   late final TextEditingController _body;
   late final TextEditingController _tags;
   late JournalEntry _entry;
+  String? _mood;
   Timer? _autosave;
+  Future<void>? _currentSave;
+  var _revision = 0;
   var _saving = false;
   var _saved = false;
+  var _disposing = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _entry = widget.entry;
+    _mood = _entry.mood;
     _title = TextEditingController(text: _entry.title ?? '');
     _body = TextEditingController(text: _currentBody());
     _tags = TextEditingController(text: _entry.tags.join(', '));
@@ -48,8 +53,9 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
 
   @override
   void dispose() {
+    _disposing = true;
     _autosave?.cancel();
-    unawaited(widget.store.save(_updated(status: JournalEntryStatus.draft)));
+    unawaited(_saveDraft());
     _title.dispose();
     _body.dispose();
     _tags.dispose();
@@ -64,8 +70,12 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
   }
 
   void _scheduleAutosave() {
+    _revision++;
     _autosave?.cancel();
     _autosave = Timer(const Duration(milliseconds: 600), _saveDraft);
+    if (mounted && !_disposing) {
+      setState(() => _saved = false);
+    }
   }
 
   JournalEntry _updated({JournalEntryStatus? status}) {
@@ -85,6 +95,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           .where((tag) => tag.isNotEmpty)
           .toSet()
           .toList(),
+      mood: _mood,
+      clearMood: _mood == null,
       guidedResponses: guided,
       status: status,
       updatedAt: DateTime.now(),
@@ -92,37 +104,63 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
   }
 
   Future<void> _saveDraft() async {
-    if (_saving) {
-      return;
+    final current = _currentSave;
+    if (current != null) {
+      return current;
     }
-    setState(() {
+    final revision = _revision;
+    final updated = _updated(status: JournalEntryStatus.draft);
+    _currentSave = _persistDraft(updated, revision);
+    return _currentSave!;
+  }
+
+  Future<void> _persistDraft(JournalEntry updated, int revision) async {
+    var needsAnotherSave = false;
+    if (mounted && !_disposing) {
+      setState(() {
+        _saving = true;
+        _saved = false;
+        _error = null;
+      });
+    } else {
       _saving = true;
-      _saved = false;
-      _error = null;
-    });
+    }
     try {
-      final updated = _updated(status: JournalEntryStatus.draft);
       await widget.store.save(updated);
-      if (mounted) {
-        setState(() {
-          _entry = updated;
+      if (revision != _revision) {
+        needsAnotherSave = true;
+      } else {
+        _entry = updated;
+        if (mounted && !_disposing) {
+          setState(() {
+            _saving = false;
+            _saved = true;
+          });
+        } else {
           _saving = false;
-          _saved = true;
-        });
+        }
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && !_disposing) {
         setState(() {
           _saving = false;
           _error = 'Draf belum tersimpan. Coba lagi.';
         });
+      } else {
+        _saving = false;
       }
+    } finally {
+      _currentSave = null;
+    }
+    if (needsAnotherSave) {
+      await _saveDraft();
     }
   }
 
   Future<void> _finish() async {
     _autosave?.cancel();
     try {
+      await _currentSave;
       final updated = _updated(status: JournalEntryStatus.saved);
       await widget.store.finish(updated);
       if (mounted) {
@@ -205,6 +243,34 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                       labelText: 'Judul opsional',
                     ),
                     textCapitalization: TextCapitalization.sentences,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: _mood,
+                    decoration: const InputDecoration(
+                      labelText: 'Suasana opsional',
+                    ),
+                    items: const [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Tidak dicatat'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'very_low',
+                        child: Text('Sangat rendah'),
+                      ),
+                      DropdownMenuItem(value: 'low', child: Text('Rendah')),
+                      DropdownMenuItem(value: 'neutral', child: Text('Netral')),
+                      DropdownMenuItem(value: 'good', child: Text('Baik')),
+                      DropdownMenuItem(
+                        value: 'very_good',
+                        child: Text('Sangat baik'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _mood = value);
+                      _scheduleAutosave();
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextField(

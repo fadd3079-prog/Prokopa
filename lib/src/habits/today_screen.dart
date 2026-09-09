@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_detail_screen.dart';
 import 'package:prokopa/src/habits/habit_form_screen.dart';
+import 'package:prokopa/src/habits/habit_list_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/app/prokopa_logo.dart';
+import 'package:prokopa/src/core/constants/brand_constants.dart';
+import 'package:prokopa/src/notifications/habit_reminder_service.dart';
 
 class TodayScreen extends StatefulWidget {
-  const TodayScreen({super.key, required this.store});
+  const TodayScreen({super.key, required this.store, this.reminderService});
 
   final HabitStore store;
+  final HabitReminderService? reminderService;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -51,7 +55,11 @@ class _TodayScreenState extends State<TodayScreen> {
   Future<void> _openForm([Habit? habit]) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => HabitFormScreen(store: widget.store, habit: habit),
+        builder: (_) => HabitFormScreen(
+          store: widget.store,
+          habit: habit,
+          reminderService: widget.reminderService,
+        ),
       ),
     );
     if (changed == true) {
@@ -89,15 +97,48 @@ class _TodayScreenState extends State<TodayScreen> {
     }
   }
 
+  Future<void> _undo(TodayHabit today) async {
+    try {
+      await widget.store.undo(today.habit);
+      await _reload();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Status kebiasaan belum dapat dikembalikan. Coba lagi.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _openDetail(Habit habit) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => HabitDetailScreen(store: widget.store, habit: habit),
+        builder: (_) => HabitDetailScreen(
+          store: widget.store,
+          habit: habit,
+          reminderService: widget.reminderService,
+        ),
       ),
     );
     if (changed == true) {
       await _reload();
     }
+  }
+
+  Future<void> _openList() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => HabitListScreen(
+          store: widget.store,
+          reminderService: widget.reminderService,
+        ),
+      ),
+    );
+    await _reload();
   }
 
   @override
@@ -130,7 +171,10 @@ class _TodayScreenState extends State<TodayScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Hari ini', style: Theme.of(context).textTheme.headlineSmall),
+                      Text(
+                        'Hari ini',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         habits.isEmpty
@@ -141,7 +185,12 @@ class _TodayScreenState extends State<TodayScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const ProkopaLogo(height: 32),
+                ProkopaLogo(
+                  asset: Theme.of(context).brightness == Brightness.dark
+                      ? BrandConstants.logoDark
+                      : BrandConstants.logoLight,
+                  height: 32,
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -153,6 +202,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   today: today,
                   onComplete: () => _complete(today),
                   onSkip: (reason) => _skip(today, reason),
+                  onUndo: () => _undo(today),
                   onOpen: () => _openDetail(today.habit),
                 ),
             const SizedBox(height: 12),
@@ -160,6 +210,11 @@ class _TodayScreenState extends State<TodayScreen> {
               onPressed: _openForm,
               icon: const Icon(Icons.add),
               label: const Text('Buat kebiasaan'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _openList,
+              child: const Text('Kelola kebiasaan'),
             ),
           ],
         ),
@@ -204,12 +259,14 @@ class _TodayHabitTile extends StatelessWidget {
     required this.today,
     required this.onComplete,
     required this.onSkip,
+    required this.onUndo,
     required this.onOpen,
   });
 
   final TodayHabit today;
   final VoidCallback onComplete;
   final ValueChanged<String> onSkip;
+  final VoidCallback onUndo;
   final VoidCallback onOpen;
 
   @override
@@ -235,11 +292,16 @@ class _TodayHabitTile extends StatelessWidget {
           ),
           subtitle: Text(subtitle),
           trailing: completed
-              ? const Icon(Icons.check_circle, semanticLabel: 'Selesai')
+              ? IconButton(
+                  tooltip: 'Batalkan selesai ${today.habit.draft.title}',
+                  onPressed: onUndo,
+                  icon: const Icon(Icons.check_circle),
+                )
               : skipped
-              ? const Icon(
-                  Icons.remove_circle_outlined,
-                  semanticLabel: 'Dilewati',
+              ? IconButton(
+                  tooltip: 'Batalkan dilewati ${today.habit.draft.title}',
+                  onPressed: onUndo,
+                  icon: const Icon(Icons.remove_circle_outlined),
                 )
               : Row(
                   mainAxisSize: MainAxisSize.min,

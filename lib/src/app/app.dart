@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:prokopa/src/achievements/achievement_store.dart';
 import 'package:prokopa/src/backup/backup_service.dart';
 import 'package:prokopa/src/app/app_shell.dart';
 import 'package:prokopa/src/app/app_theme.dart';
@@ -13,6 +14,7 @@ import 'package:prokopa/src/insights/insight_store.dart';
 import 'package:prokopa/src/privacy/app_lock_screen.dart';
 import 'package:prokopa/src/privacy/app_lock_store.dart';
 import 'package:prokopa/src/notifications/local_notification_service.dart';
+import 'package:prokopa/src/notifications/habit_reminder_service.dart';
 import 'package:prokopa/src/notifications/notification_store.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -37,9 +39,11 @@ class _ProkopaAppState extends State<ProkopaApp> with WidgetsBindingObserver {
   WellbeingStore? _wellbeingStore;
   ProgressStore? _progressStore;
   InsightStore? _insightStore;
+  AchievementStore? _achievementStore;
   BackupService? _backupService;
   AppLockStore? _appLockStore;
   NotificationStore? _notificationStore;
+  HabitReminderService? _habitReminderService;
   final _notificationService = LocalNotificationService();
   DateTime? _backgroundedAt;
   var _locked = false;
@@ -108,9 +112,14 @@ class _ProkopaAppState extends State<ProkopaApp> with WidgetsBindingObserver {
         _wellbeingStore = WellbeingStore(database);
         _progressStore = ProgressStore(database);
         _insightStore = InsightStore(database);
+        _achievementStore = AchievementStore(database);
         _backupService = BackupService(database);
         _appLockStore = lockStore;
         _notificationStore = NotificationStore(database);
+        _habitReminderService = HabitReminderService(
+          database,
+          _notificationService,
+        );
         _profile = completed ? profile : null;
         _loading = false;
       });
@@ -152,6 +161,34 @@ class _ProkopaAppState extends State<ProkopaApp> with WidgetsBindingObserver {
     });
   }
 
+  Future<String?> _reloadDatabaseState() async {
+    final database = widget.database;
+    if (database == null || !mounted) {
+      return null;
+    }
+    setState(() {
+      _loading = true;
+      _loadError = null;
+      _locked = false;
+    });
+    await _loadProfile(database);
+    if (_loadError != null) {
+      return 'Backup dipulihkan, tetapi data belum dapat dibuka. Coba mulai ulang aplikasi.';
+    }
+    try {
+      await _achievementStore?.evaluate();
+      await _insightStore?.refresh();
+      await NotificationStore(database).rebuildSchedules(_notificationService);
+      await HabitReminderService(
+        database,
+        _notificationService,
+      ).rescheduleEnabled();
+      return null;
+    } catch (_) {
+      return 'Backup dipulihkan. Periksa kembali pengingat lokal.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appearance = _profile?.appearance ?? AppAppearance.system;
@@ -187,7 +224,12 @@ class _ProkopaAppState extends State<ProkopaApp> with WidgetsBindingObserver {
       return OnboardingFlow(onComplete: _completeOnboarding);
     }
     if (_locked && _appLockStore != null) {
-      return AppLockScreen(store: _appLockStore!, onUnlocked: _unlock);
+      return AppLockScreen(
+        store: _appLockStore!,
+        onUnlocked: _unlock,
+        onDataReset: _resetToOnboarding,
+        notificationService: _notificationService,
+      );
     }
     return AppShell(
       profile: _profile,
@@ -197,11 +239,14 @@ class _ProkopaAppState extends State<ProkopaApp> with WidgetsBindingObserver {
       wellbeingStore: widget.enableFeatureScreens ? _wellbeingStore : null,
       progressStore: widget.enableFeatureScreens ? _progressStore : null,
       insightStore: widget.enableFeatureScreens ? _insightStore : null,
+      achievementStore: widget.enableFeatureScreens ? _achievementStore : null,
       backupService: _backupService,
       appLockStore: _appLockStore,
       notificationStore: _notificationStore,
       notificationService: _notificationService,
+      habitReminderService: _habitReminderService,
       onDataReset: _resetToOnboarding,
+      onDataRestored: _reloadDatabaseState,
       onProfileChanged: _updateProfile,
     );
   }

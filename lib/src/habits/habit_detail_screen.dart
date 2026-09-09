@@ -3,16 +3,19 @@ import 'package:prokopa/src/core/date/local_date.dart';
 import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_form_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
+import 'package:prokopa/src/notifications/habit_reminder_service.dart';
 
 class HabitDetailScreen extends StatefulWidget {
   const HabitDetailScreen({
     super.key,
     required this.store,
     required this.habit,
+    this.reminderService,
   });
 
   final HabitStore store;
   final Habit habit;
+  final HabitReminderService? reminderService;
 
   @override
   State<HabitDetailScreen> createState() => _HabitDetailScreenState();
@@ -66,7 +69,11 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
   Future<void> _edit() async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => HabitFormScreen(store: widget.store, habit: _habit),
+        builder: (_) => HabitFormScreen(
+          store: widget.store,
+          habit: _habit,
+          reminderService: widget.reminderService,
+        ),
       ),
     );
     if (changed == true) {
@@ -77,17 +84,28 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
   Future<void> _pauseOrResume() async {
     if (_habit.state == HabitState.paused) {
       await widget.store.resume(_habit);
+      await _reload();
+      if (_habit.state == HabitState.active) {
+        await widget.reminderService?.synchronize(_habit);
+      }
     } else {
       await widget.store.pause(_habit);
+      await widget.reminderService?.cancel(_habit);
     }
     await _reload();
   }
 
   Future<void> _archive() async {
     await widget.store.archive(_habit);
+    await widget.reminderService?.cancel(_habit);
     if (mounted) {
       Navigator.of(context).pop(true);
     }
+  }
+
+  Future<void> _restore() async {
+    await widget.store.restore(_habit);
+    await _reload();
   }
 
   Future<void> _delete() async {
@@ -112,6 +130,7 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
     );
     if (confirmed == true) {
       await widget.store.delete(_habit);
+      await widget.reminderService?.cancel(_habit);
       if (mounted) {
         Navigator.of(context).pop(true);
       }
@@ -122,7 +141,8 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
     try {
       if (action == HabitRecoveryAction.pause) {
         await widget.store.pauseWithRecovery(_habit);
-      } else {
+        await widget.reminderService?.cancel(_habit);
+      } else if (action != HabitRecoveryAction.continueHabit) {
         await widget.store.recordRecovery(_habit, action);
       }
       if (!mounted) {
@@ -168,11 +188,12 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
       appBar: AppBar(
         title: const Text('Kebiasaan'),
         actions: [
-          IconButton(
-            onPressed: _edit,
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Ubah kebiasaan',
-          ),
+          if (_habit.state != HabitState.archived)
+            IconButton(
+              onPressed: _edit,
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Ubah kebiasaan',
+            ),
           PopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {
@@ -180,18 +201,24 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
                   _pauseOrResume();
                 case 'archive':
                   _archive();
+                case 'restore':
+                  _restore();
                 case 'delete':
                   _delete();
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'pause',
-                child: Text(
-                  _habit.state == HabitState.paused ? 'Lanjutkan' : 'Jeda',
+              if (_habit.state == HabitState.archived)
+                const PopupMenuItem(value: 'restore', child: Text('Pulihkan'))
+              else ...[
+                PopupMenuItem(
+                  value: 'pause',
+                  child: Text(
+                    _habit.state == HabitState.paused ? 'Lanjutkan' : 'Jeda',
+                  ),
                 ),
-              ),
-              const PopupMenuItem(value: 'archive', child: Text('Arsipkan')),
+                const PopupMenuItem(value: 'archive', child: Text('Arsipkan')),
+              ],
               const PopupMenuItem(value: 'delete', child: Text('Hapus')),
             ],
           ),
