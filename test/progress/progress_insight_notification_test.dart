@@ -201,7 +201,7 @@ void main() {
     expect(
       insights
           .singleWhere((insight) => insight.type == 'sleep_habit_observation')
-          .observation,
+          .action,
       contains('bukan sebab-akibat'),
     );
   });

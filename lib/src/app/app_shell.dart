@@ -65,7 +65,7 @@ class _AppShellState extends State<AppShell> {
     NavigationDestination(
       icon: Icon(Icons.today_outlined),
       selectedIcon: Icon(Icons.today),
-      label: 'Today',
+      label: 'Home',
     ),
     NavigationDestination(
       icon: Icon(Icons.book_outlined),
@@ -99,9 +99,11 @@ class _AppShellState extends State<AppShell> {
         TodayScreen(
           store: widget.habitStore!,
           reminderService: widget.habitReminderService,
+          journalStore: widget.journalStore,
+          wellbeingStore: widget.wellbeingStore,
         )
       else
-        const _PlaceholderDestination(label: 'Today'),
+        const _PlaceholderDestination(label: 'Home'),
       if (widget.journalStore != null && widget.wellbeingStore != null)
         JournalScreen(
           store: widget.journalStore!,

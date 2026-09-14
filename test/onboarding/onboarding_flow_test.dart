@@ -34,7 +34,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('fresh local database enters onboarding and reaches Today', (
+  testWidgets('fresh local database enters onboarding and reaches Home', (
     tester,
   ) async {
     final database = await openTestDatabase(tester);
@@ -53,7 +53,7 @@ void main() {
     await completeOnboarding(tester);
 
     expect(find.byType(AppShell), findsOneWidget);
-    expect(find.text('Today'), findsWidgets);
+    expect(find.text('Home'), findsWidgets);
   });
 
   testWidgets('completed onboarding does not reappear after an app rebuild', (

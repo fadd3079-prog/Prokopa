@@ -5,19 +5,19 @@ import 'package:prokopa/src/app/app.dart';
 import 'package:prokopa/src/app/app_shell.dart';
 
 void main() {
-  const labels = ['Today', 'Journal', 'Progress', 'Insights', 'Profile'];
+  const labels = ['Home', 'Journal', 'Progress', 'Insights', 'Profile'];
 
   Finder title(String label) => find.descendant(
     of: find.byType(IndexedStack),
     matching: find.text(label),
   );
 
-  testWidgets('application starts on Today without feature data', (
+  testWidgets('application starts on Home without feature data', (
     tester,
   ) async {
     await tester.pumpWidget(const ProkopaApp());
     expect(find.byType(AppShell), findsOneWidget);
-    expect(title('Today'), findsOneWidget);
+    expect(title('Home'), findsOneWidget);
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       0,
@@ -43,7 +43,7 @@ void main() {
       );
     }
     for (final label in [
-      'Home',
+      'Today',
       'Login',
       'Signup',
       'Account',
@@ -57,7 +57,7 @@ void main() {
   });
 
   for (final label in labels.skip(1)) {
-    testWidgets('$label can be selected and Today can be restored', (
+    testWidgets('$label can be selected and Home can be restored', (
       tester,
     ) async {
       await tester.pumpWidget(const ProkopaApp());
@@ -65,15 +65,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(title(label), findsOneWidget);
-      expect(title('Today'), findsNothing);
+      expect(title('Home'), findsNothing);
       expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
         labels.indexOf(label),
       );
 
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Today'));
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Home'));
       await tester.pumpAndSettle();
-      expect(title('Today'), findsOneWidget);
+      expect(title('Home'), findsOneWidget);
       expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
         0,
@@ -85,27 +85,27 @@ void main() {
     'sequential and arbitrary tab changes retain destination elements',
     (tester) async {
       await tester.pumpWidget(const ProkopaApp());
-      final todayElement = tester.element(title('Today'));
+      final todayElement = tester.element(title('Home'));
 
       for (final label in [
         'Journal',
         'Progress',
         'Insights',
         'Profile',
-        'Today',
+        'Home',
         'Insights',
         'Journal',
         'Profile',
         'Progress',
-        'Today',
-        'Today',
+        'Home',
+        'Home',
       ]) {
         await tester.tap(find.widgetWithText(NavigationDestination, label));
         await tester.pumpAndSettle();
         expect(title(label), findsOneWidget);
         expect(tester.takeException(), isNull);
       }
-      expect(tester.element(title('Today')), same(todayElement));
+      expect(tester.element(title('Home')), same(todayElement));
     },
   );
 

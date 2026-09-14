@@ -132,7 +132,7 @@ class HabitStore {
       if (rows.singleOrNull?['state'] == HabitExecutionState.missed.value) {
         throw StateError('A missed execution cannot be completed implicitly.');
       }
-      final now = utcTimestamp(DateTime.now());
+      final now = utcTimestamp(day);
       final values = {
         'habit_id': effectiveHabit.id,
         'planned_date': key,

@@ -6,13 +6,27 @@ import 'package:prokopa/src/habits/habit_list_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/app/prokopa_logo.dart';
 import 'package:prokopa/src/core/constants/brand_constants.dart';
+import 'package:prokopa/src/core/date/local_date.dart';
+import 'package:prokopa/src/journal/journal_entry.dart';
+import 'package:prokopa/src/journal/journal_editor_screen.dart';
+import 'package:prokopa/src/journal/journal_store.dart';
 import 'package:prokopa/src/notifications/habit_reminder_service.dart';
+import 'package:prokopa/src/wellbeing/mood_check_in_sheet.dart';
+import 'package:prokopa/src/wellbeing/wellbeing_store.dart';
 
 class TodayScreen extends StatefulWidget {
-  const TodayScreen({super.key, required this.store, this.reminderService});
+  const TodayScreen({
+    super.key,
+    required this.store,
+    this.reminderService,
+    this.journalStore,
+    this.wellbeingStore,
+  });
 
   final HabitStore store;
   final HabitReminderService? reminderService;
+  final JournalStore? journalStore;
+  final WellbeingStore? wellbeingStore;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -141,6 +155,28 @@ class _TodayScreenState extends State<TodayScreen> {
     await _reload();
   }
 
+  Future<void> _openMoodCheckIn() async {
+    final store = widget.wellbeingStore;
+    if (store == null || !mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => MoodCheckInSheet(store: store),
+    );
+  }
+
+  Future<void> _openQuickJournal() async {
+    final store = widget.journalStore;
+    if (store == null || !mounted) return;
+    final draft = await store.createDraft(type: JournalEntryType.free);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => JournalEditorScreen(store: store, entry: draft),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -157,6 +193,7 @@ class _TodayScreenState extends State<TodayScreen> {
       );
     }
     final habits = _habits!;
+    final now = DateTime.now();
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _reload,
@@ -171,6 +208,11 @@ class _TodayScreenState extends State<TodayScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(
+                        localDateKey(now),
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         'Hari ini',
                         style: Theme.of(context).textTheme.headlineSmall,
@@ -192,6 +234,11 @@ class _TodayScreenState extends State<TodayScreen> {
                   height: 32,
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            _QuickActions(
+              onMood: widget.wellbeingStore != null ? _openMoodCheckIn : null,
+              onJournal: widget.journalStore != null ? _openQuickJournal : null,
             ),
             const SizedBox(height: 20),
             if (habits.isEmpty)
@@ -336,6 +383,39 @@ class _TodayHabitTile extends StatelessWidget {
                 ),
         ),
         const Divider(height: 1),
+      ],
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({this.onMood, this.onJournal});
+
+  final VoidCallback? onMood;
+  final VoidCallback? onJournal;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onMood == null && onJournal == null) return const SizedBox.shrink();
+    return Row(
+      children: [
+        if (onMood != null)
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onMood,
+              icon: const Icon(Icons.mood_outlined),
+              label: const Text('Suasana'),
+            ),
+          ),
+        if (onMood != null && onJournal != null) const SizedBox(width: 12),
+        if (onJournal != null)
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onJournal,
+              icon: const Icon(Icons.edit_note),
+              label: const Text('Jurnal'),
+            ),
+          ),
       ],
     );
   }

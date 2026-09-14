@@ -9,12 +9,12 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 const testMigrations = <DatabaseMigration>[
   ...databaseMigrations,
   (
-    version: 5,
+    version: 6,
     name: 'create_migration_probe',
     statements: ['CREATE TABLE migration_probe (id INTEGER PRIMARY KEY)'],
   ),
   (
-    version: 6,
+    version: 7,
     name: 'extend_migration_probe',
     statements: ['ALTER TABLE migration_probe ADD COLUMN value TEXT'],
   ),
@@ -88,6 +88,7 @@ void main() {
         {'version': 2, 'name': 'create_local_product_data'},
         {'version': 3, 'name': 'create_habit_recoveries'},
         {'version': 4, 'name': 'add_habit_reminder_days'},
+        {'version': 5, 'name': 'link_recovery_to_interruption'},
       ],
     );
   });
@@ -95,7 +96,7 @@ void main() {
   test('initial schema version is explicit and stored in SQLite', () async {
     final database = await openTestDatabase();
 
-    expect(databaseSchemaVersion, 4);
+    expect(databaseSchemaVersion, 5);
     expect(databaseMigrations.last.version, databaseSchemaVersion);
     expect(await database.getVersion(), databaseSchemaVersion);
     expect(await database.rawQuery('PRAGMA user_version'), [
@@ -130,7 +131,7 @@ void main() {
       expect(await upgraded.query('preservation_probe'), [
         {'id': 7},
       ]);
-      expect(await upgraded.query('schema_migrations'), hasLength(4));
+      expect(await upgraded.query('schema_migrations'), hasLength(5));
     },
   );
 
@@ -140,7 +141,7 @@ void main() {
       testMigrations,
     );
 
-    expect(await database.getVersion(), 6);
+    expect(await database.getVersion(), 7);
     await database.insert('migration_probe', {'id': 1, 'value': 'probe'});
     expect(await database.query('migration_probe'), [
       {'id': 1, 'value': 'probe'},
@@ -158,6 +159,7 @@ void main() {
         {'version': 4},
         {'version': 5},
         {'version': 6},
+        {'version': 7},
       ],
     );
   });
@@ -168,7 +170,7 @@ void main() {
       final databasePath = await temporaryDatabasePath();
       final previous = await openMigrationFixture(
         databasePath,
-        testMigrations.take(5).toList(),
+        testMigrations.take(6).toList(),
       );
       await previous.insert('migration_probe', {'id': 7});
       final priorLedger = await previous.query(
@@ -179,19 +181,19 @@ void main() {
 
       final upgraded = await openMigrationFixture(databasePath, testMigrations);
 
-      expect(await upgraded.getVersion(), 6);
+      expect(await upgraded.getVersion(), 7);
       expect(await upgraded.query('migration_probe'), [
         {'id': 7, 'value': null},
       ]);
       expect(
         await upgraded.query(
           'schema_migrations',
-          where: 'version <= 5',
+          where: 'version <= 6',
           orderBy: 'version',
         ),
         priorLedger,
       );
-      expect(await upgraded.query('schema_migrations'), hasLength(6));
+      expect(await upgraded.query('schema_migrations'), hasLength(7));
     },
   );
 
@@ -200,15 +202,15 @@ void main() {
 
     await expectLater(
       database.transaction(
-        (transaction) => runDatabaseMigrations(transaction, 4, 6, [
+        (transaction) => runDatabaseMigrations(transaction, 5, 7, [
+          testMigrations[6],
           testMigrations[5],
-          testMigrations[4],
         ]),
       ),
       throwsStateError,
     );
-    expect(await database.query('schema_migrations'), hasLength(4));
-    expect(await database.getVersion(), 4);
+    expect(await database.query('schema_migrations'), hasLength(5));
+    expect(await database.getVersion(), 5);
   });
 
   test('a missing migration is rejected before changing schema', () async {
@@ -217,11 +219,11 @@ void main() {
     await expectLater(
       database.transaction(
         (transaction) =>
-            runDatabaseMigrations(transaction, 4, 6, [testMigrations[4]]),
+            runDatabaseMigrations(transaction, 5, 7, [testMigrations[5]]),
       ),
       throwsStateError,
     );
-    expect(await database.query('schema_migrations'), hasLength(4));
+    expect(await database.query('schema_migrations'), hasLength(5));
     expect(
       await database.rawQuery(
         "SELECT name FROM sqlite_master WHERE name = 'migration_probe'",
@@ -240,9 +242,9 @@ void main() {
 
       await expectLater(
         openMigrationFixture(databasePath, [
-          ...testMigrations.take(5),
+          ...testMigrations.take(6),
           (
-            version: 6,
+            version: 7,
             name: 'failing_migration',
             statements: [
               'INSERT INTO migration_probe (id) VALUES (1)',
@@ -252,7 +254,7 @@ void main() {
         ]),
         throwsA(
           isA<DatabaseMigrationException>()
-              .having((error) => error.version, 'version', 6)
+              .having((error) => error.version, 'version', 7)
               .having((error) => error.name, 'name', 'failing_migration')
               .having(
                 (error) => error.cause,
@@ -263,7 +265,7 @@ void main() {
       );
 
       final reopened = await openTestDatabase(databasePath: databasePath);
-      expect(await reopened.getVersion(), 4);
+      expect(await reopened.getVersion(), 5);
       expect(await reopened.query('schema_migrations'), priorLedger);
       expect(
         await reopened.rawQuery(
@@ -283,7 +285,7 @@ void main() {
         openMigrationFixture(databasePath, [
           ...databaseMigrations,
           (
-            version: 5,
+            version: 6,
             name: 'failing_initialization',
             statements: ['INSERT INTO missing_table (id) VALUES (1)'],
           ),
@@ -310,7 +312,7 @@ void main() {
     final databasePath = await temporaryDatabasePath();
     final newer = await openMigrationFixture(databasePath, testMigrations);
     await newer.insert('migration_probe', {'id': 7, 'value': 'preserved'});
-    expect(await newer.getVersion(), 6);
+    expect(await newer.getVersion(), 7);
     final originalSchema = await newer.rawQuery(
       'SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name',
     );
@@ -324,7 +326,7 @@ void main() {
       openTestDatabase(databasePath: databasePath),
       throwsA(
         isA<UnsupportedDatabaseVersionException>()
-            .having((error) => error.storedVersion, 'storedVersion', 6)
+            .having((error) => error.storedVersion, 'storedVersion', 7)
             .having(
               (error) => error.supportedVersion,
               'supportedVersion',
@@ -339,7 +341,7 @@ void main() {
       options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
     );
     addTearDown(reopened.close);
-    expect(await reopened.getVersion(), 6);
+    expect(await reopened.getVersion(), 7);
     expect(await reopened.query('migration_probe'), [
       {'id': 7, 'value': 'preserved'},
     ]);
@@ -451,7 +453,7 @@ void main() {
       ),
       isEmpty,
     );
-    expect(await second.query('schema_migrations'), hasLength(4));
+    expect(await second.query('schema_migrations'), hasLength(5));
   });
 
   test('database open failure propagates to the caller', () async {
