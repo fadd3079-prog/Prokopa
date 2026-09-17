@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:prokopa/src/journal/journal_editor_screen.dart';
 import 'package:prokopa/src/journal/journal_entry.dart';
 import 'package:prokopa/src/journal/journal_store.dart';
-import 'package:prokopa/src/wellbeing/mood_check_in_sheet.dart';
-import 'package:prokopa/src/wellbeing/mood_history_screen.dart';
 import 'package:prokopa/src/wellbeing/wellbeing_store.dart';
+import 'package:prokopa/src/app/app_theme.dart';
 
 class JournalScreen extends StatefulWidget {
   const JournalScreen({
@@ -63,7 +62,7 @@ class _JournalScreenState extends State<JournalScreen> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Catatan belum dapat dimuat. Coba lagi.');
+        setState(() => _error = 'Gagal memuat catatan.');
       }
     }
   }
@@ -93,7 +92,7 @@ class _JournalScreenState extends State<JournalScreen> {
       if (mounted) {
         setState(() {
           _loadingMore = false;
-          _error = 'Catatan berikutnya belum dapat dimuat. Coba lagi.';
+          _error = 'Gagal memuat catatan berikutnya.';
         });
       }
     }
@@ -155,30 +154,6 @@ class _JournalScreenState extends State<JournalScreen> {
     }
   }
 
-  Future<void> _checkInMood() async {
-    await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => MoodCheckInSheet(store: widget.wellbeingStore),
-    );
-  }
-
-  Future<void> _filter() async {
-    final selected = await showModalBottomSheet<_JournalFilter>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => _JournalFilterSheet(type: _type, mood: _mood),
-    );
-    if (selected == null) {
-      return;
-    }
-    setState(() {
-      _type = selected.type;
-      _mood = selected.mood;
-    });
-    await _reload();
-  }
-
   @override
   Widget build(BuildContext context) {
     final entries = _entries;
@@ -186,34 +161,14 @@ class _JournalScreenState extends State<JournalScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: ProkopaSpacing.xl, vertical: ProkopaSpacing.xxl),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     'Jurnal',
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: Theme.of(context).textTheme.headlineLarge,
                   ),
-                ),
-                IconButton(
-                  onPressed: _checkInMood,
-                  icon: const Icon(Icons.mood_outlined),
-                  tooltip: 'Catat suasana',
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          MoodHistoryScreen(store: widget.wellbeingStore),
-                    ),
-                  ),
-                  icon: const Icon(Icons.history_outlined),
-                  tooltip: 'Riwayat suasana',
-                ),
-                IconButton(
-                  onPressed: _filter,
-                  icon: const Icon(Icons.filter_list),
-                  tooltip: 'Filter catatan',
                 ),
                 PopupMenuButton<JournalEntryType>(
                   tooltip: 'Buat catatan',
@@ -228,30 +183,12 @@ class _JournalScreenState extends State<JournalScreen> {
                       child: Text('Refleksi terpandu'),
                     ),
                   ],
-                  icon: const Icon(Icons.add),
+                  icon: const Icon(Icons.add_circle, size: 32),
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: TextField(
-              controller: _search,
-              decoration: const InputDecoration(
-                labelText: 'Cari catatan',
-                prefixIcon: Icon(Icons.search),
-              ),
-            ),
-          ),
-          if (_type != null || _mood != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: Text(
-                'Filter aktif: ${_filterLabel()}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          const SizedBox(height: 12),
           Expanded(
             child: entries == null
                 ? const Center(child: CircularProgressIndicator())
@@ -264,12 +201,9 @@ class _JournalScreenState extends State<JournalScreen> {
                   )
                 : entries.isEmpty
                 ? _JournalEmpty(onCreate: _create)
-                : ListView.separated(
-                    padding: const EdgeInsets.all(20),
-                    itemCount:
-                        entries.length + (_hasMore || _loadingMore ? 1 : 0),
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: ProkopaSpacing.xl),
+                    itemCount: entries.length + (_hasMore || _loadingMore ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == entries.length) {
                         return Padding(
@@ -285,24 +219,11 @@ class _JournalScreenState extends State<JournalScreen> {
                         );
                       }
                       final entry = entries[index];
-                      return ListTile(
-                        onTap: () => _open(entry),
-                        title: Text(
-                          entry.title?.isNotEmpty == true
-                              ? entry.title!
-                              : 'Tanpa judul',
-                        ),
-                        subtitle: Text(
-                          entry.bodyPreview.isEmpty
-                              ? 'Draf kosong'
-                              : entry.bodyPreview.replaceAll('\n', ' '),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Text(
-                          entry.status == JournalEntryStatus.draft
-                              ? 'Draf'
-                              : 'Tersimpan',
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: ProkopaSpacing.md),
+                        child: _JournalCard(
+                          entry: entry,
+                          onTap: () => _open(entry),
                         ),
                       );
                     },
@@ -312,125 +233,64 @@ class _JournalScreenState extends State<JournalScreen> {
       ),
     );
   }
-
-  String _filterLabel() {
-    final labels = <String>[];
-    if (_type != null) {
-      labels.add(_type == JournalEntryType.free ? 'bebas' : 'terpandu');
-    }
-    if (_mood != null) {
-      labels.add(_moodLabel(_mood!));
-    }
-    return labels.join(', ');
-  }
-
-  String _moodLabel(String value) => switch (value) {
-    'very_low' => 'sangat rendah',
-    'low' => 'rendah',
-    'neutral' => 'netral',
-    'good' => 'baik',
-    'very_good' => 'sangat baik',
-    _ => value,
-  };
 }
 
-class _JournalFilter {
-  const _JournalFilter({this.type, this.mood});
+class _JournalCard extends StatelessWidget {
+  const _JournalCard({required this.entry, required this.onTap});
 
-  final JournalEntryType? type;
-  final String? mood;
-}
-
-class _JournalFilterSheet extends StatefulWidget {
-  const _JournalFilterSheet({this.type, this.mood});
-
-  final JournalEntryType? type;
-  final String? mood;
-
-  @override
-  State<_JournalFilterSheet> createState() => _JournalFilterSheetState();
-}
-
-class _JournalFilterSheetState extends State<_JournalFilterSheet> {
-  late JournalEntryType? _type;
-  late String? _mood;
-
-  @override
-  void initState() {
-    super.initState();
-    _type = widget.type;
-    _mood = widget.mood;
-  }
+  final JournalEntryPreview entry;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          20 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Filter catatan',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<JournalEntryType?>(
-              initialValue: _type,
-              decoration: const InputDecoration(labelText: 'Jenis catatan'),
-              items: const [
-                DropdownMenuItem<JournalEntryType?>(
-                  value: null,
-                  child: Text('Semua jenis'),
+    final title = entry.title?.isNotEmpty == true ? entry.title! : 'Tanpa judul';
+    final preview = entry.bodyPreview.isEmpty ? 'Draf kosong' : entry.bodyPreview.replaceAll('\n', ' ');
+
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: ProkopaRadius.lgBorder,
+        child: Padding(
+          padding: ProkopaSpacing.cardPadding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (entry.status == JournalEntryStatus.draft)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Draf',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: ProkopaSpacing.sm),
+              Text(
+                preview,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-                DropdownMenuItem(
-                  value: JournalEntryType.free,
-                  child: Text('Catatan bebas'),
-                ),
-                DropdownMenuItem(
-                  value: JournalEntryType.guided,
-                  child: Text('Refleksi terpandu'),
-                ),
-              ],
-              onChanged: (value) => setState(() => _type = value),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String?>(
-              initialValue: _mood,
-              decoration: const InputDecoration(labelText: 'Suasana'),
-              items: const [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Semua suasana'),
-                ),
-                DropdownMenuItem(
-                  value: 'very_low',
-                  child: Text('Sangat rendah'),
-                ),
-                DropdownMenuItem(value: 'low', child: Text('Rendah')),
-                DropdownMenuItem(value: 'neutral', child: Text('Netral')),
-                DropdownMenuItem(value: 'good', child: Text('Baik')),
-                DropdownMenuItem(
-                  value: 'very_good',
-                  child: Text('Sangat baik'),
-                ),
-              ],
-              onChanged: (value) => setState(() => _mood = value),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(context)
-                      .pop(_JournalFilter(type: _type, mood: _mood)),
-              child: const Text('Terapkan filter'),
-            ),
-          ],
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -444,24 +304,42 @@ class _JournalEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+    return Padding(
+      padding: ProkopaSpacing.screenPadding,
+      child: Center(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.book_outlined,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: ProkopaSpacing.xxxl),
             Text(
               'Belum ada catatan.',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 8),
-            const Text(
+            const SizedBox(height: ProkopaSpacing.sm),
+            Text(
               'Tulis bebas atau gunakan satu pertanyaan sebagai awal.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-            FilledButton(
+            const SizedBox(height: ProkopaSpacing.xxxl),
+            FilledButton.icon(
               onPressed: () => onCreate(JournalEntryType.free),
-              child: const Text('Tulis catatan'),
+              icon: const Icon(Icons.edit),
+              label: const Text('Tulis Jurnal'),
             ),
           ],
         ),

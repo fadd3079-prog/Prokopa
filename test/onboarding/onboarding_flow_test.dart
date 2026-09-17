@@ -20,12 +20,6 @@ void main() {
   }
 
   Future<void> completeOnboarding(WidgetTester tester) async {
-    await tester.tap(find.text('Lanjutkan'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Lanjutkan'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Lanjutkan'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Rani');
     await tester.tap(find.text('Mulai'));
     await tester.runAsync(
@@ -47,7 +41,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Ruang kecil untuk kebiasaan dan refleksi.'),
+      find.text('Selamat datang.'),
       findsOneWidget,
     );
     await completeOnboarding(tester);
@@ -79,7 +73,7 @@ void main() {
 
     expect(find.byType(AppShell), findsOneWidget);
     expect(
-      find.text('Ruang kecil untuk kebiasaan dan refleksi.'),
+      find.text('Selamat datang.'),
       findsNothing,
     );
   });
@@ -98,12 +92,11 @@ void main() {
     await tester.tap(find.widgetWithText(NavigationDestination, 'Profile'));
     await tester.pumpAndSettle();
     expect(find.text('Rani'), findsOneWidget);
-    await tester.tap(find.text('Edit profil'));
+    await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Dita');
-    await tester.tap(find.text('Aksen'));
     await tester.tap(find.text('Gelap'));
-    await tester.tap(find.text('Simpan perubahan'));
+    await tester.tap(find.text('Simpan'));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );

@@ -4,6 +4,7 @@ import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/progress/progress_store.dart';
 import 'package:prokopa/src/wellbeing/wellbeing_store.dart';
+import 'package:prokopa/src/app/app_theme.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({
@@ -22,13 +23,8 @@ class ProgressScreen extends StatefulWidget {
 }
 
 class _ProgressScreenState extends State<ProgressScreen> {
-  ProgressSnapshot? _week;
   ProgressSnapshot? _month;
-  List<SleepRecord> _sleep = const [];
   List<HabitProgress> _habits = const [];
-  double? _averageSleepMinutes;
-  double? _averageSleepQuality;
-  double? _sleepConsistency;
   var _loading = true;
 
   @override
@@ -54,12 +50,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
     ]);
     if (mounted) {
       setState(() {
-        _week = results[0] as ProgressSnapshot;
         _month = results[1] as ProgressSnapshot;
-        _sleep = results[2] as List<SleepRecord>;
-        _averageSleepMinutes = results[3] as double?;
-        _averageSleepQuality = results[4] as double?;
-        _sleepConsistency = results[5] as double?;
         _habits = widget.habitStore == null
             ? const []
             : results[6] as List<HabitProgress>;
@@ -91,42 +82,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
     }
   }
 
-  Future<void> _addSleep([SleepRecord? record]) async {
-    final changed = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) =>
-          _SleepForm(store: widget.wellbeingStore, record: record),
-    );
-    if (changed == true) {
-      await _reload();
-    }
-  }
-
-  Future<void> _deleteSleep(SleepRecord record) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Hapus catatan tidur?'),
-        content: const Text('Catatan ini akan dihapus dari perangkat ini.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await widget.wellbeingStore.deleteSleep(record.id);
-      await _reload();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -136,87 +91,224 @@ class _ProgressScreenState extends State<ProgressScreen> {
       child: RefreshIndicator(
         onRefresh: _reload,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(vertical: ProkopaSpacing.xxl),
           children: [
-            Text('Progress', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 20),
-            _SummarySection(title: 'Minggu ini', snapshot: _week!),
-            const SizedBox(height: 20),
-            _SummarySection(title: 'Bulan ini', snapshot: _month!),
-            const SizedBox(height: 20),
-            Text('Kebiasaan', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            Padding(
+              padding: ProkopaSpacing.screenPadding,
+              child: Text('Progress', style: Theme.of(context).textTheme.headlineLarge),
+            ),
+            const SizedBox(height: ProkopaSpacing.xxl),
+            Padding(
+              padding: ProkopaSpacing.screenPadding,
+              child: _SummaryCard(snapshot: _month!, title: 'Bulan ini'),
+            ),
+            const SizedBox(height: ProkopaSpacing.xxxl),
+            Padding(
+              padding: ProkopaSpacing.screenPadding,
+              child: Text('Riwayat', style: Theme.of(context).textTheme.titleLarge),
+            ),
+            const SizedBox(height: ProkopaSpacing.lg),
+            _CalendarFullWidth(snapshot: _month!),
+            const SizedBox(height: ProkopaSpacing.xxxl),
+            Padding(
+              padding: ProkopaSpacing.screenPadding,
+              child: Text('Konsistensi Kebiasaan', style: Theme.of(context).textTheme.titleLarge),
+            ),
+            const SizedBox(height: ProkopaSpacing.sm),
             if (_habits.isEmpty)
-              const Text('Belum ada kebiasaan yang dapat ditinjau.')
+              const Padding(
+                padding: ProkopaSpacing.screenPadding,
+                child: Text('Belum ada kebiasaan yang dapat ditinjau.'),
+              )
             else
               for (final progress in _habits)
                 _HabitProgressRow(progress: progress),
-            const SizedBox(height: 20),
-            Text('Kalender', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _CalendarLegend(),
-            const SizedBox(height: 8),
-            _Calendar(snapshot: _month!),
-            const SizedBox(height: 20),
-            Text('Tidur', style: Theme.of(context).textTheme.titleMedium),
-            if (_averageSleepMinutes != null &&
-                _averageSleepQuality != null &&
-                _sleepConsistency != null)
-              Text(
-                'Rata-rata ${_duration(_averageSleepMinutes!)} · kualitas ${_averageSleepQuality!.toStringAsFixed(1)}/4 · konsistensi ${(_sleepConsistency! * 100).round()}%',
-              )
-            else
-              const Text('Belum ada catatan tidur.'),
-            if (_sleep.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              for (final record in _sleep.take(7))
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${localDateKey(record.end)} · ${_duration(record.durationMinutes.toDouble())}',
-                  ),
-                  subtitle: Text(_quality(record.quality)),
-                  onTap: () => _addSleep(record),
-                  trailing: IconButton(
-                    tooltip: 'Hapus catatan tidur',
-                    onPressed: () => _deleteSleep(record),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ),
-            ],
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _addSleep,
-              icon: const Icon(Icons.bedtime_outlined),
-              label: const Text('Catat tidur'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () => _review('weekly'),
-              child: const Text('Tinjauan minggu ini'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () => _review('monthly'),
-              child: const Text('Tinjauan bulan ini'),
+            const SizedBox(height: ProkopaSpacing.xxxl),
+            Padding(
+              padding: ProkopaSpacing.screenPadding,
+              child: OutlinedButton(
+                onPressed: () => _review('monthly'),
+                child: const Text('Tinjauan bulan ini'),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  String _duration(double minutes) {
-    final rounded = minutes.round();
-    return '${rounded ~/ 60}j ${rounded % 60}m';
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({required this.title, required this.snapshot});
+
+  final String title;
+  final ProgressSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: ProkopaSpacing.cardPadding,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: ProkopaRadius.xlBorder,
+        border: Border.all(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              Icon(Icons.insights_rounded, color: Theme.of(context).colorScheme.primary),
+            ],
+          ),
+          const SizedBox(height: ProkopaSpacing.xl),
+          Text(
+            snapshot.planned == 0
+                ? 'Belum ada jadwal pelaksanaan.'
+                : '${snapshot.completed} selesai dari ${snapshot.planned} terjadwal.',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: ProkopaSpacing.sm),
+          Text(
+            '${snapshot.repetitions} tindakan tercatat.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalendarFullWidth extends StatelessWidget {
+  const _CalendarFullWidth({required this.snapshot});
+
+  final ProgressSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = <DateTime>[];
+    var day = DateTime(
+      snapshot.start.year,
+      snapshot.start.month,
+      snapshot.start.day,
+    );
+    while (!day.isAfter(snapshot.end)) {
+      days.add(day);
+      day = day.add(const Duration(days: 1));
+    }
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final availableWidth = screenWidth - 40; 
+    final cellSize = (availableWidth - (6 * 8)) / 7;
+
+    return Padding(
+      padding: ProkopaSpacing.screenPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              _WeekdayLabel('Sen'), _WeekdayLabel('Sel'), _WeekdayLabel('Rab'), 
+              _WeekdayLabel('Kam'), _WeekdayLabel('Jum'), _WeekdayLabel('Sab'), _WeekdayLabel('Min')
+            ],
+          ),
+          const SizedBox(height: ProkopaSpacing.sm),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (int i = 0; i < (snapshot.start.weekday - 1); i++)
+                SizedBox(width: cellSize, height: cellSize),
+              for (final day in days)
+                Semantics(
+                  label: '${localDateKey(day)} ${_label(snapshot.calendar[localDateKey(day)])}',
+                  child: Container(
+                    width: cellSize,
+                    height: cellSize,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: ProkopaRadius.mdBorder,
+                      border: Border.all(
+                        color: _borderColor(context, snapshot.calendar[localDateKey(day)]),
+                        width: 1.5,
+                      ),
+                      color: _color(context, snapshot.calendar[localDateKey(day)]),
+                    ),
+                    child: Text(
+                      '${day.day}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _textColor(context, snapshot.calendar[localDateKey(day)]),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
-  String _quality(SleepQuality value) => switch (value) {
-    SleepQuality.poor => 'Kurang',
-    SleepQuality.fair => 'Cukup',
-    SleepQuality.good => 'Baik',
-    SleepQuality.excellent => 'Sangat baik',
+  String _label(String? state) => switch (state) {
+    'completed' => 'Selesai',
+    'partial' => 'Sebagian',
+    'skipped' => 'Dilewati',
+    'missed' => 'Terlewat',
+    _ => 'Tanpa rencana',
   };
+
+  Color _color(BuildContext context, String? state) => switch (state) {
+    'completed' => ProkopaPalette.success,
+    'partial' => ProkopaPalette.momentum,
+    'skipped' => Theme.of(context).colorScheme.surfaceContainerHighest,
+    'missed' => Colors.transparent,
+    _ => Theme.of(context).colorScheme.surface,
+  };
+
+  Color _borderColor(BuildContext context, String? state) => switch (state) {
+    'completed' => ProkopaPalette.success,
+    'partial' => ProkopaPalette.momentum,
+    'skipped' => Theme.of(context).colorScheme.surfaceContainerHighest,
+    'missed' => Theme.of(context).colorScheme.outlineVariant, 
+    _ => Theme.of(context).colorScheme.surfaceContainerHighest,
+  };
+
+  Color _textColor(BuildContext context, String? state) => switch (state) {
+    'completed' => Colors.white,
+    'partial' => Colors.white,
+    'skipped' => Theme.of(context).colorScheme.onSurfaceVariant,
+    'missed' => Theme.of(context).colorScheme.onSurfaceVariant, 
+    _ => Theme.of(context).colorScheme.onSurface,
+  };
+}
+
+class _WeekdayLabel extends StatelessWidget {
+  const _WeekdayLabel(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final availableWidth = screenWidth - 40; 
+    final cellSize = (availableWidth - (6 * 8)) / 7;
+    
+    return SizedBox(
+      width: cellSize,
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 }
 
 class _HabitProgressRow extends StatelessWidget {
@@ -230,12 +322,15 @@ class _HabitProgressRow extends StatelessWidget {
         ? '${progress.weekCompleted}/${progress.weekTarget} minggu ini · ${progress.repetitions} repetisi · ${progress.currentStreak} minggu beruntun'
         : '${progress.repetitions} repetisi · streak ${progress.currentStreak} · terpanjang ${progress.longestStreak}';
     return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(progress.habit.draft.title),
+      contentPadding: ProkopaSpacing.screenPadding,
+      title: Text(progress.habit.draft.title, style: Theme.of(context).textTheme.titleMedium),
       subtitle: Text(
         progress.recoveryCount == 0
             ? detail
             : '$detail · ${progress.recoveryCount} kali kembali',
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -299,50 +394,30 @@ class _ReviewEditorState extends State<_ReviewEditor> {
   @override
   Widget build(BuildContext context) {
     final data = widget.record.data;
-    final averageMood = data['averageMood'] as num?;
-    final averageSleepMinutes = data['averageSleepMinutes'] as num?;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          20 + MediaQuery.viewInsetsOf(context).bottom,
+          24,
+          32,
+          24,
+          24 + MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: ListView(
-          shrinkWrap: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               widget.record.type == 'weekly'
                   ? 'Tinjauan minggu ini'
                   : 'Tinjauan bulan ini',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: ProkopaSpacing.xl),
             Text(
               '${data['completed']} selesai dari ${data['planned']} terjadwal.',
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
-            if (data['mostConsistentHabit'] != null)
-              Text('Paling konsisten: ${data['mostConsistentHabit']}.')
-            else
-              const Text('Belum ada kebiasaan terjadwal untuk dibandingkan.'),
-            if (data['hardestHabit'] != null)
-              Text('Paling menantang: ${data['hardestHabit']}.')
-            else
-              const SizedBox.shrink(),
-            Text('${data['journalCount']} catatan jurnal tersimpan.'),
-            Text(
-              averageMood == null
-                  ? '${data['moodCount']} catatan suasana.'
-                  : '${data['moodCount']} catatan suasana, rata-rata ${averageMood.toStringAsFixed(1)}/5.',
-            ),
-            Text(
-              averageSleepMinutes == null
-                  ? '${data['sleepCount']} catatan tidur.'
-                  : '${data['sleepCount']} catatan tidur, rata-rata ${_duration(averageSleepMinutes)}.',
-            ),
-            Text('${data['recoveryCount']} kali kembali setelah jeda.'),
-            const SizedBox(height: 20),
+            const SizedBox(height: ProkopaSpacing.md),
             TextField(
               controller: _reflection,
               enabled: !_saving,
@@ -350,11 +425,11 @@ class _ReviewEditorState extends State<_ReviewEditor> {
               maxLines: 5,
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
-                labelText:
-                    'Apa yang membantu, sulit, atau ingin kamu sesuaikan?',
+                hintText: 'Apa yang membantu, sulit, atau ingin kamu sesuaikan?',
+                filled: true,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: ProkopaSpacing.lg),
             DropdownButtonFormField<String?>(
               initialValue: _adjustment,
               decoration: const InputDecoration(
@@ -390,314 +465,24 @@ class _ReviewEditorState extends State<_ReviewEditor> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? 'Menyimpan' : 'Simpan tinjauan'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _duration(num minutes) {
-    final rounded = minutes.round();
-    return '${rounded ~/ 60}j ${rounded % 60}m';
-  }
-}
-
-class _SummarySection extends StatelessWidget {
-  const _SummarySection({required this.title, required this.snapshot});
-
-  final String title;
-  final ProgressSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final rate = snapshot.completionRate;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Text(
-          '${snapshot.completed} selesai dari ${snapshot.planned} terjadwal',
-        ),
-        if (rate != null) ...[
-          const SizedBox(height: 6),
-          LinearProgressIndicator(
-            value: rate,
-            semanticsLabel: 'Tingkat penyelesaian',
-          ),
-          const SizedBox(height: 4),
-          Text('${(rate * 100).round()}% penyelesaian'),
-        ] else
-          const Text('Belum ada pelaksanaan yang tercatat.'),
-        Text('${snapshot.repetitions} repetisi'),
-      ],
-    );
-  }
-}
-
-class _CalendarLegend extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return const Wrap(
-      spacing: 12,
-      runSpacing: 4,
-      children: [
-        Text('Selesai'),
-        Text('Sebagian'),
-        Text('Dilewati'),
-        Text('Terlewat'),
-        Text('Tanpa rencana'),
-      ],
-    );
-  }
-}
-
-class _Calendar extends StatelessWidget {
-  const _Calendar({required this.snapshot});
-
-  final ProgressSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final days = <DateTime>[];
-    var day = DateTime(
-      snapshot.start.year,
-      snapshot.start.month,
-      snapshot.start.day,
-    );
-    while (!day.isAfter(snapshot.end)) {
-      days.add(day);
-      day = day.add(const Duration(days: 1));
-    }
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final day in days)
-          Semantics(
-            label:
-                '${localDateKey(day)} ${_label(snapshot.calendar[localDateKey(day)])}',
-            child: Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+            const SizedBox(height: ProkopaSpacing.xxxl),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Batal'),
                 ),
-                color: _color(context, snapshot.calendar[localDateKey(day)]),
-              ),
-              child: Text('${day.day}'),
-            ),
-          ),
-      ],
-    );
-  }
-
-  String _label(String? state) => switch (state) {
-    'completed' => 'Selesai',
-    'partial' => 'Sebagian',
-    'skipped' => 'Dilewati',
-    'missed' => 'Terlewat',
-    _ => 'Tanpa rencana',
-  };
-
-  Color _color(BuildContext context, String? state) => switch (state) {
-    'completed' => Theme.of(context).colorScheme.primaryContainer,
-    'partial' => Theme.of(context).colorScheme.secondaryContainer,
-    'skipped' => Theme.of(context).colorScheme.surfaceContainerHighest,
-    'missed' => Theme.of(context).colorScheme.errorContainer,
-    _ => Theme.of(context).colorScheme.surface,
-  };
-}
-
-class _SleepForm extends StatefulWidget {
-  const _SleepForm({required this.store, this.record});
-
-  final WellbeingStore store;
-  final SleepRecord? record;
-
-  @override
-  State<_SleepForm> createState() => _SleepFormState();
-}
-
-class _SleepFormState extends State<_SleepForm> {
-  late TimeOfDay _start;
-  late TimeOfDay _end;
-  late DateTime _wakeDate;
-  var _quality = SleepQuality.good;
-  final _note = TextEditingController();
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final record = widget.record;
-    if (record != null) {
-      _wakeDate = DateTime(record.end.year, record.end.month, record.end.day);
-      _start = TimeOfDay.fromDateTime(record.start);
-      _end = TimeOfDay.fromDateTime(record.end);
-      _quality = record.quality;
-      _note.text = record.note ?? '';
-    } else {
-      final now = TimeOfDay.now();
-      _wakeDate = DateTime.now();
-      _end = now;
-      _start = TimeOfDay(hour: (now.hour + 16) % 24, minute: now.minute);
-    }
-  }
-
-  @override
-  void dispose() {
-    _note.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pick(bool start) async {
-    final selected = await showTimePicker(
-      context: context,
-      initialTime: start ? _start : _end,
-    );
-    if (selected != null) {
-      setState(() {
-        if (start) {
-          _start = selected;
-        } else {
-          _end = selected;
-        }
-      });
-    }
-  }
-
-  Future<void> _pickWakeDate() async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _wakeDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (selected != null) {
-      setState(() => _wakeDate = selected);
-    }
-  }
-
-  Future<void> _save() async {
-    final wakeDate = _wakeDate;
-    var start = DateTime(
-      wakeDate.year,
-      wakeDate.month,
-      wakeDate.day,
-      _start.hour,
-      _start.minute,
-    );
-    final end = DateTime(
-      wakeDate.year,
-      wakeDate.month,
-      wakeDate.day,
-      _end.hour,
-      _end.minute,
-    );
-    if (!start.isBefore(end)) {
-      start = start.subtract(const Duration(days: 1));
-    }
-    try {
-      await widget.store.saveSleep(
-        id: widget.record?.id,
-        start: start,
-        end: end,
-        quality: _quality,
-        note: _note.text,
-      );
-      if (mounted) {
-        Navigator.of(context).pop(true);
-      }
-    } on ArgumentError catch (error) {
-      setState(() => _error = error.message?.toString());
-    } catch (_) {
-      setState(() => _error = 'Tidur belum tersimpan. Coba lagi.');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          20 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.record == null ? 'Catat tidur' : 'Ubah catatan tidur',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            ListTile(
-              title: const Text('Tanggal bangun'),
-              trailing: Text(localDateKey(_wakeDate)),
-              onTap: _pickWakeDate,
-            ),
-            ListTile(
-              title: const Text('Mulai tidur'),
-              trailing: Text(_start.format(context)),
-              onTap: () => _pick(true),
-            ),
-            ListTile(
-              title: const Text('Bangun'),
-              trailing: Text(_end.format(context)),
-              onTap: () => _pick(false),
-            ),
-            DropdownButtonFormField<SleepQuality>(
-              initialValue: _quality,
-              decoration: const InputDecoration(labelText: 'Kualitas'),
-              items: SleepQuality.values
-                  .map(
-                    (quality) => DropdownMenuItem(
-                      value: quality,
-                      child: Text(_qualityLabel(quality)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() => _quality = value!),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _note,
-              maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Catatan opsional'),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!),
-              ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _save,
-                child: const Text('Simpan tidur'),
-              ),
+                const SizedBox(width: ProkopaSpacing.sm),
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving ? 'Menyimpan' : 'Simpan tinjauan'),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
   }
-
-  String _qualityLabel(SleepQuality quality) => switch (quality) {
-    SleepQuality.poor => 'Kurang',
-    SleepQuality.fair => 'Cukup',
-    SleepQuality.good => 'Baik',
-    SleepQuality.excellent => 'Sangat baik',
-  };
 }

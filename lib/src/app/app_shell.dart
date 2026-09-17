@@ -101,6 +101,7 @@ class _AppShellState extends State<AppShell> {
           reminderService: widget.habitReminderService,
           journalStore: widget.journalStore,
           wellbeingStore: widget.wellbeingStore,
+          profileName: widget.profile?.name,
         )
       else
         const _PlaceholderDestination(label: 'Home'),
@@ -143,16 +144,14 @@ class _AppShellState extends State<AppShell> {
         const _PlaceholderDestination(label: 'Profile'),
     ];
     return Scaffold(
-      body: SafeArea(
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            for (var index = 0; index < screens.length; index++)
-              _visited.contains(index)
-                  ? screens[index]
-                  : const SizedBox.shrink(),
-          ],
-        ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          for (var index = 0; index < screens.length; index++)
+            _visited.contains(index)
+                ? screens[index]
+                : const SizedBox.shrink(),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
