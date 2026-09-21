@@ -26,6 +26,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
   ProgressSnapshot? _month;
   List<HabitProgress> _habits = const [];
   var _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -34,28 +35,38 @@ class _ProgressScreenState extends State<ProgressScreen> {
   }
 
   Future<void> _reload() async {
-    final now = DateTime.now();
-    final weekStart = now.subtract(
-      Duration(days: now.weekday - DateTime.monday),
-    );
-    final monthStart = DateTime(now.year, now.month);
-    final results = await Future.wait([
-      widget.store.snapshot(weekStart, now),
-      widget.store.snapshot(monthStart, now),
-      widget.wellbeingStore.listSleep(),
-      widget.wellbeingStore.averageSleepDuration(),
-      widget.wellbeingStore.averageSleepQuality(),
-      widget.wellbeingStore.sleepConsistency(),
-      if (widget.habitStore != null) widget.habitStore!.progress(),
-    ]);
-    if (mounted) {
-      setState(() {
-        _month = results[1] as ProgressSnapshot;
-        _habits = widget.habitStore == null
-            ? const []
-            : results[6] as List<HabitProgress>;
-        _loading = false;
-      });
+    try {
+      final now = DateTime.now();
+      final weekStart = now.subtract(
+        Duration(days: now.weekday - DateTime.monday),
+      );
+      final monthStart = DateTime(now.year, now.month);
+      final results = await Future.wait([
+        widget.store.snapshot(weekStart, now),
+        widget.store.snapshot(monthStart, now),
+        widget.wellbeingStore.listSleep(),
+        widget.wellbeingStore.averageSleepDuration(),
+        widget.wellbeingStore.averageSleepQuality(),
+        widget.wellbeingStore.sleepConsistency(),
+        if (widget.habitStore != null) widget.habitStore!.progress(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _month = results[1] as ProgressSnapshot;
+          _habits = widget.habitStore == null
+              ? const []
+              : results[6] as List<HabitProgress>;
+          _loading = false;
+          _error = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Statistik belum dapat dimuat. Coba lagi.';
+        });
+      }
     }
   }
 
@@ -87,6 +98,29 @@ class _ProgressScreenState extends State<ProgressScreen> {
     if (_loading) {
       return const SafeArea(child: Center(child: CircularProgressIndicator()));
     }
+    if (_error case final error?) {
+      return SafeArea(
+        child: Center(
+          child: Padding(
+            padding: ProkopaSpacing.cardPadding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(error, textAlign: TextAlign.center),
+                const SizedBox(height: ProkopaSpacing.lg),
+                FilledButton(
+                  onPressed: () {
+                    setState(() => _loading = true);
+                    _reload();
+                  },
+                  child: const Text('Coba lagi'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _reload,
@@ -95,24 +129,51 @@ class _ProgressScreenState extends State<ProgressScreen> {
           children: [
             Padding(
               padding: ProkopaSpacing.screenPadding,
-              child: Text('Progress', style: Theme.of(context).textTheme.headlineLarge),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Statistik',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                  ),
+                  const SizedBox(height: ProkopaSpacing.xs),
+                  Text(
+                    'Ringkasan kebiasaan untuk ${_monthLabel(DateTime.now())}',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: ProkopaSpacing.xxl),
             Padding(
               padding: ProkopaSpacing.screenPadding,
-              child: _SummaryCard(snapshot: _month!, title: 'Bulan ini'),
+              child: _SummaryCard(
+                snapshot: _month!,
+                activeHabitCount: _habits.length,
+              ),
             ),
             const SizedBox(height: ProkopaSpacing.xxxl),
             Padding(
               padding: ProkopaSpacing.screenPadding,
-              child: Text('Riwayat', style: Theme.of(context).textTheme.titleLarge),
+              child: Text(
+                'Aktivitas bulan ini',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
             const SizedBox(height: ProkopaSpacing.lg),
             _CalendarFullWidth(snapshot: _month!),
             const SizedBox(height: ProkopaSpacing.xxxl),
             Padding(
               padding: ProkopaSpacing.screenPadding,
-              child: Text('Konsistensi Kebiasaan', style: Theme.of(context).textTheme.titleLarge),
+              child: Text(
+                'Konsistensi Kebiasaan',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
             const SizedBox(height: ProkopaSpacing.sm),
             if (_habits.isEmpty)
@@ -136,48 +197,131 @@ class _ProgressScreenState extends State<ProgressScreen> {
       ),
     );
   }
+
+  String _monthLabel(DateTime date) {
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.title, required this.snapshot});
+  const _SummaryCard({required this.snapshot, required this.activeHabitCount});
 
-  final String title;
   final ProgressSnapshot snapshot;
+  final int activeHabitCount;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: ProkopaSpacing.cardPadding,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: ProkopaRadius.xlBorder,
-        border: Border.all(color: Theme.of(context).colorScheme.surfaceContainerHighest),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              Icon(Icons.insights_rounded, color: Theme.of(context).colorScheme.primary),
-            ],
-          ),
-          const SizedBox(height: ProkopaSpacing.xl),
-          Text(
-            snapshot.planned == 0
-                ? 'Belum ada jadwal pelaksanaan.'
-                : '${snapshot.completed} selesai dari ${snapshot.planned} terjadwal.',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: ProkopaSpacing.sm),
-          Text(
-            '${snapshot.repetitions} tindakan tercatat.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+    final completion = ((snapshot.completionRate ?? 0) * 100).round();
+    final activeDays = snapshot.calendar.values.where((state) {
+      return state == 'completed' || state == 'partial';
+    }).length;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scaledBody = MediaQuery.textScalerOf(context).scale(14);
+        final useTwoColumns = constraints.maxWidth >= 340 && scaledBody <= 21;
+        final itemWidth = useTwoColumns
+            ? (constraints.maxWidth - ProkopaSpacing.md) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: ProkopaSpacing.md,
+          runSpacing: ProkopaSpacing.md,
+          children: [
+            SizedBox(
+              width: itemWidth,
+              child: _MetricCard(
+                value: '$completion%',
+                label: 'Rata-rata selesai',
+                icon: Icons.donut_large,
+              ),
             ),
-          ),
-        ],
+            SizedBox(
+              width: itemWidth,
+              child: _MetricCard(
+                value: '$activeDays',
+                label: 'Hari aktif',
+                icon: Icons.calendar_today_outlined,
+                color: ProkopaPalette.success,
+              ),
+            ),
+            SizedBox(
+              width: itemWidth,
+              child: _MetricCard(
+                value: '${snapshot.repetitions}',
+                label: 'Penyelesaian',
+                icon: Icons.check_circle_outline,
+              ),
+            ),
+            SizedBox(
+              width: itemWidth,
+              child: _MetricCard(
+                value: '$activeHabitCount',
+                label: 'Habit aktif',
+                icon: Icons.track_changes_outlined,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.value,
+    required this.label,
+    required this.icon,
+    this.color,
+  });
+
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = color ?? theme.colorScheme.primary;
+    return Card(
+      child: Padding(
+        padding: ProkopaSpacing.cardPadding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              label: label,
+              image: true,
+              child: ExcludeSemantics(child: Icon(icon, color: accent)),
+            ),
+            const SizedBox(height: ProkopaSpacing.lg),
+            Text(
+              value,
+              style: theme.textTheme.headlineSmall?.copyWith(color: accent),
+            ),
+            const SizedBox(height: ProkopaSpacing.xs),
+            Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -202,7 +346,7 @@ class _CalendarFullWidth extends StatelessWidget {
     }
 
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final availableWidth = screenWidth - 40; 
+    final availableWidth = screenWidth - 40;
     final cellSize = (availableWidth - (6 * 8)) / 7;
 
     return Padding(
@@ -213,8 +357,13 @@ class _CalendarFullWidth extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
-              _WeekdayLabel('Sen'), _WeekdayLabel('Sel'), _WeekdayLabel('Rab'), 
-              _WeekdayLabel('Kam'), _WeekdayLabel('Jum'), _WeekdayLabel('Sab'), _WeekdayLabel('Min')
+              _WeekdayLabel('Sen'),
+              _WeekdayLabel('Sel'),
+              _WeekdayLabel('Rab'),
+              _WeekdayLabel('Kam'),
+              _WeekdayLabel('Jum'),
+              _WeekdayLabel('Sab'),
+              _WeekdayLabel('Min'),
             ],
           ),
           const SizedBox(height: ProkopaSpacing.sm),
@@ -226,7 +375,8 @@ class _CalendarFullWidth extends StatelessWidget {
                 SizedBox(width: cellSize, height: cellSize),
               for (final day in days)
                 Semantics(
-                  label: '${localDateKey(day)} ${_label(snapshot.calendar[localDateKey(day)])}',
+                  label:
+                      '${localDateKey(day)} ${_label(snapshot.calendar[localDateKey(day)])}',
                   child: Container(
                     width: cellSize,
                     height: cellSize,
@@ -234,16 +384,25 @@ class _CalendarFullWidth extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: ProkopaRadius.mdBorder,
                       border: Border.all(
-                        color: _borderColor(context, snapshot.calendar[localDateKey(day)]),
+                        color: _borderColor(
+                          context,
+                          snapshot.calendar[localDateKey(day)],
+                        ),
                         width: 1.5,
                       ),
-                      color: _color(context, snapshot.calendar[localDateKey(day)]),
+                      color: _color(
+                        context,
+                        snapshot.calendar[localDateKey(day)],
+                      ),
                     ),
                     child: Text(
                       '${day.day}',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: _textColor(context, snapshot.calendar[localDateKey(day)]),
+                        color: _textColor(
+                          context,
+                          snapshot.calendar[localDateKey(day)],
+                        ),
                       ),
                     ),
                   ),
@@ -275,15 +434,15 @@ class _CalendarFullWidth extends StatelessWidget {
     'completed' => ProkopaPalette.success,
     'partial' => ProkopaPalette.momentum,
     'skipped' => Theme.of(context).colorScheme.surfaceContainerHighest,
-    'missed' => Theme.of(context).colorScheme.outlineVariant, 
+    'missed' => Theme.of(context).colorScheme.outlineVariant,
     _ => Theme.of(context).colorScheme.surfaceContainerHighest,
   };
 
   Color _textColor(BuildContext context, String? state) => switch (state) {
     'completed' => Colors.white,
-    'partial' => Colors.white,
+    'partial' => ProkopaPalette.textPrimary,
     'skipped' => Theme.of(context).colorScheme.onSurfaceVariant,
-    'missed' => Theme.of(context).colorScheme.onSurfaceVariant, 
+    'missed' => Theme.of(context).colorScheme.onSurfaceVariant,
     _ => Theme.of(context).colorScheme.onSurface,
   };
 }
@@ -295,17 +454,16 @@ class _WeekdayLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final availableWidth = screenWidth - 40; 
+    final availableWidth = screenWidth - 40;
     final cellSize = (availableWidth - (6 * 8)) / 7;
-    
+
     return SizedBox(
       width: cellSize,
       child: Text(
         label,
         textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: Theme.of(context).textTheme.labelMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );
   }
@@ -323,14 +481,16 @@ class _HabitProgressRow extends StatelessWidget {
         : '${progress.repetitions} repetisi · streak ${progress.currentStreak} · terpanjang ${progress.longestStreak}';
     return ListTile(
       contentPadding: ProkopaSpacing.screenPadding,
-      title: Text(progress.habit.draft.title, style: Theme.of(context).textTheme.titleMedium),
+      title: Text(
+        progress.habit.draft.title,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
       subtitle: Text(
         progress.recoveryCount == 0
             ? detail
             : '$detail · ${progress.recoveryCount} kali kembali',
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );
   }
@@ -425,7 +585,8 @@ class _ReviewEditorState extends State<_ReviewEditor> {
               maxLines: 5,
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
-                hintText: 'Apa yang membantu, sulit, atau ingin kamu sesuaikan?',
+                hintText:
+                    'Apa yang membantu, sulit, atau ingin kamu sesuaikan?',
                 filled: true,
               ),
             ),

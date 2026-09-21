@@ -78,12 +78,51 @@ class _JournalInsightSummaryState extends State<JournalInsightSummary> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Semantics(
-            header: true,
-            child: Text(
-              'Insight',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+          Row(
+            children: [
+              Semantics(
+                label: 'Insight jurnal',
+                image: true,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary
+                        .withValues(alpha: 0.1),
+                    borderRadius: ProkopaRadius.mdBorder,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(ProkopaSpacing.md),
+                    child: ExcludeSemantics(
+                      child: Icon(
+                        Icons.auto_graph_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: ProkopaSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        'Insight',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    const SizedBox(height: ProkopaSpacing.xs),
+                    Text(
+                      'Pola singkat dari catatan dan kebiasaanmu.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: ProkopaSpacing.md),
           if (insights == null && _error == null)

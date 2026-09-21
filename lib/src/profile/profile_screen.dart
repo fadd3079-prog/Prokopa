@@ -108,53 +108,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final name = widget.profile.name.trim();
     final initials = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
-    
+
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: ProkopaSpacing.xxl),
         children: [
           Padding(
             padding: ProkopaSpacing.screenPadding,
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: _avatarColor(context, widget.profile.avatar),
+                Semantics(
+                  header: true,
                   child: Text(
-                    initials, 
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                    )
+                    'Profile',
+                    style: Theme.of(context).textTheme.headlineLarge,
                   ),
                 ),
-                const SizedBox(width: ProkopaSpacing.xl),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.profile.name,
-                        style: Theme.of(context).textTheme.headlineLarge,
-                      ),
-                      const SizedBox(height: ProkopaSpacing.xs),
-                      Text(
-                        'Profil Lokal',
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                    ],
+                const SizedBox(height: ProkopaSpacing.xs),
+                Text(
+                  'Kelola identitas lokal dan preferensi aplikasi.',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
-                if (!_editing)
-                  IconButton(
-                    onPressed: () => setState(() => _editing = true),
-                    icon: const Icon(Icons.edit_outlined),
-                    tooltip: 'Edit profil',
+                const SizedBox(height: ProkopaSpacing.xxl),
+                Card(
+                  child: Padding(
+                    padding: ProkopaSpacing.cardPadding,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 34,
+                          backgroundColor: _avatarColor(
+                            context,
+                            widget.profile.avatar,
+                          ),
+                          child: Text(
+                            initials,
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: ProkopaSpacing.xl),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.profile.name,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: ProkopaSpacing.xs),
+                              Text(
+                                'Profil lokal',
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!_editing)
+                          IconButton(
+                            onPressed: () => setState(() => _editing = true),
+                            icon: const ExcludeSemantics(
+                              child: Icon(Icons.edit_outlined),
+                            ),
+                            tooltip: 'Edit profil',
+                          ),
+                      ],
+                    ),
                   ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: ProkopaSpacing.xxxl),
-          
+
           if (_editing)
             Padding(
               padding: ProkopaSpacing.screenPadding,
@@ -162,7 +198,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )
           else ...[
             _SectionHeader('Preferensi & Keamanan'),
-            if (widget.notificationStore != null && widget.notificationService != null)
+            if (widget.notificationStore != null &&
+                widget.notificationService != null)
               _SettingsTile(
                 icon: Icons.notifications_outlined,
                 title: 'Pengingat',
@@ -204,7 +241,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-              
+
             if (widget.achievementStore != null) ...[
               const SizedBox(height: ProkopaSpacing.xl),
               _SectionHeader('Aktivitas'),
@@ -213,12 +250,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 title: 'Pencapaian',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => AchievementsScreen(store: widget.achievementStore!),
+                    builder: (_) =>
+                        AchievementsScreen(store: widget.achievementStore!),
                   ),
                 ),
               ),
             ],
-            
+
             const SizedBox(height: ProkopaSpacing.huge),
             Center(
               child: Column(
@@ -227,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     asset: Theme.of(context).brightness == Brightness.dark
                         ? BrandConstants.logoDark
                         : BrandConstants.logoLight,
-                    height: 36
+                    height: 36,
                   ),
                   const SizedBox(height: ProkopaSpacing.sm),
                   Text(
@@ -292,11 +330,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: _saving ? null : () => setState(() {
-                    _editing = false;
-                    _name.text = widget.profile.name;
-                    _appearance = widget.profile.appearance;
-                  }),
+                  onPressed: _saving
+                      ? null
+                      : () => setState(() {
+                          _editing = false;
+                          _name.text = widget.profile.name;
+                          _appearance = widget.profile.appearance;
+                        }),
                   child: const Text('Batal'),
                 ),
                 const SizedBox(width: ProkopaSpacing.sm),
@@ -337,12 +377,7 @@ class _SectionHeader extends StatelessWidget {
         right: ProkopaSpacing.xl,
         bottom: ProkopaSpacing.sm,
       ),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
+      child: Text(title, style: Theme.of(context).textTheme.titleLarge),
     );
   }
 }
@@ -360,12 +395,40 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      title: Text(title, style: Theme.of(context).textTheme.titleMedium),
-      trailing: const Icon(Icons.chevron_right, size: 20),
-      contentPadding: const EdgeInsets.symmetric(horizontal: ProkopaSpacing.xl),
-      onTap: onTap,
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(
+        ProkopaSpacing.xl,
+        0,
+        ProkopaSpacing.xl,
+        ProkopaSpacing.md,
+      ),
+      child: Card(
+        child: ListTile(
+          minTileHeight: 68,
+          leading: DecoratedBox(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: ProkopaRadius.mdBorder,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(ProkopaSpacing.md),
+              child: ExcludeSemantics(
+                child: Icon(icon, color: theme.colorScheme.primary),
+              ),
+            ),
+          ),
+          title: Text(title, style: theme.textTheme.titleMedium),
+          trailing: const ExcludeSemantics(
+            child: Icon(Icons.chevron_right, size: 20),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: ProkopaSpacing.lg,
+            vertical: ProkopaSpacing.xs,
+          ),
+          onTap: onTap,
+        ),
+      ),
     );
   }
 }

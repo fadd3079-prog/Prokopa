@@ -52,9 +52,23 @@ void main() {
     await _pumpUntilFound(tester, find.text('1 dari 1 selesai hari ini'));
 
     expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Penyelesaian hari ini'), findsOneWidget);
+    expect(find.text('Ringkasan'), findsOneWidget);
     expect(find.text('Streak kebiasaan'), findsOneWidget);
-    expect(find.text('Membaca'), findsOneWidget);
-    expect(find.text('2 hari'), findsOneWidget);
+    expect(find.text('Membaca'), findsNWidgets(2));
+    expect(find.text('2 hari'), findsNWidgets(2));
+
+    tester.view.physicalSize = const Size(320, 640);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: DashboardScreen(store: setup.store),
+      ),
+    );
+    await _pumpUntilFound(tester, find.text('Penyelesaian hari ini'));
+    expect(tester.takeException(), isNull);
   });
 }
 

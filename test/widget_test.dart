@@ -5,14 +5,14 @@ import 'package:prokopa/src/app/app.dart';
 import 'package:prokopa/src/app/app_shell.dart';
 
 void main() {
-  const labels = ['Home', 'Habits', 'Journal', 'Progress', 'Profile'];
+  const labels = ['Dashboard', 'Habits', 'Journal', 'Statistik', 'Profile'];
 
   Finder title(String label) => find.descendant(
     of: find.byType(IndexedStack),
     matching: find.text(label),
   );
 
-  testWidgets('application starts on Home without feature data', (
+  testWidgets('application starts on Dashboard without feature data', (
     tester,
   ) async {
     await tester.pumpWidget(const ProkopaApp());
@@ -57,7 +57,7 @@ void main() {
   });
 
   for (final label in labels.skip(1)) {
-    testWidgets('$label can be selected and Home can be restored', (
+    testWidgets('$label can be selected and Dashboard can be restored', (
       tester,
     ) async {
       await tester.pumpWidget(const ProkopaApp());
@@ -69,7 +69,7 @@ void main() {
         labels.indexOf(label),
       );
 
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Home'));
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Dashboard'));
       await tester.pumpAndSettle();
       expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
@@ -82,20 +82,20 @@ void main() {
     'sequential and arbitrary tab changes retain destination elements',
     (tester) async {
       await tester.pumpWidget(const ProkopaApp());
-      final todayElement = tester.element(title('Home'));
+      final todayElement = tester.element(title('Dashboard'));
 
       for (final label in [
         'Habits',
         'Journal',
-        'Progress',
+        'Statistik',
         'Profile',
-        'Home',
+        'Dashboard',
         'Habits',
         'Journal',
         'Profile',
-        'Progress',
-        'Home',
-        'Home',
+        'Statistik',
+        'Dashboard',
+        'Dashboard',
       ]) {
         await tester.tap(find.widgetWithText(NavigationDestination, label));
         await tester.pumpAndSettle();
@@ -104,7 +104,7 @@ void main() {
         // instead of checking IndexedStack descendant directly since it can be offstage.
         expect(tester.takeException(), isNull);
       }
-      expect(tester.element(title('Home')), same(todayElement));
+      expect(tester.element(title('Dashboard')), same(todayElement));
     },
   );
 

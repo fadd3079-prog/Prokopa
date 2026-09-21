@@ -63,28 +63,28 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   static const _destinations = [
     NavigationDestination(
-      icon: ExcludeSemantics(child: Icon(Icons.dashboard_outlined)),
-      selectedIcon: ExcludeSemantics(child: Icon(Icons.dashboard)),
-      label: 'Home',
+      icon: ExcludeSemantics(child: Icon(Icons.grid_view_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.grid_view_rounded)),
+      label: 'Dashboard',
     ),
     NavigationDestination(
-      icon: ExcludeSemantics(child: Icon(Icons.checklist_outlined)),
-      selectedIcon: ExcludeSemantics(child: Icon(Icons.checklist)),
+      icon: ExcludeSemantics(child: Icon(Icons.track_changes_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.track_changes)),
       label: 'Habits',
     ),
     NavigationDestination(
-      icon: ExcludeSemantics(child: Icon(Icons.book_outlined)),
-      selectedIcon: ExcludeSemantics(child: Icon(Icons.book)),
+      icon: ExcludeSemantics(child: Icon(Icons.menu_book_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.menu_book_rounded)),
       label: 'Journal',
     ),
     NavigationDestination(
-      icon: ExcludeSemantics(child: Icon(Icons.assessment_outlined)),
-      selectedIcon: ExcludeSemantics(child: Icon(Icons.assessment)),
-      label: 'Progress',
+      icon: ExcludeSemantics(child: Icon(Icons.bar_chart_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.bar_chart_rounded)),
+      label: 'Statistik',
     ),
     NavigationDestination(
-      icon: ExcludeSemantics(child: Icon(Icons.person_outline)),
-      selectedIcon: ExcludeSemantics(child: Icon(Icons.person)),
+      icon: ExcludeSemantics(child: Icon(Icons.account_circle_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.account_circle)),
       label: 'Profile',
     ),
   ];
@@ -103,7 +103,7 @@ class _AppShellState extends State<AppShell> {
           refreshVersion: _refreshVersions[0],
         )
       else
-        const _PlaceholderDestination(label: 'Home'),
+        const _PlaceholderDestination(label: 'Dashboard'),
       if (widget.habitStore != null)
         TodayScreen(
           store: widget.habitStore!,
@@ -132,7 +132,7 @@ class _AppShellState extends State<AppShell> {
           habitStore: widget.habitStore,
         )
       else
-        const _PlaceholderDestination(label: 'Progress'),
+        const _PlaceholderDestination(label: 'Statistik'),
       if (widget.profile != null &&
           widget.profileStore != null &&
           widget.onProfileChanged != null)
@@ -160,18 +160,27 @@ class _AppShellState extends State<AppShell> {
             _visited.contains(index) ? screens[index] : const SizedBox.shrink(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() {
-          _selectedIndex = index;
-          _visited.add(index);
-          _refreshVersions[index]++;
-        }),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        animationDuration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : null,
-        destinations: _destinations,
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) => setState(() {
+            _selectedIndex = index;
+            _visited.add(index);
+            _refreshVersions[index]++;
+          }),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          animationDuration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : null,
+          destinations: _destinations,
+        ),
       ),
     );
   }

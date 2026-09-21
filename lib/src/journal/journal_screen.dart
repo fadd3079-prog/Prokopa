@@ -180,30 +180,55 @@ class _JournalScreenState extends State<JournalScreen> {
               vertical: ProkopaSpacing.xxl,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    'Jurnal',
-                    style: Theme.of(context).textTheme.headlineLarge,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          'Jurnal',
+                          style: Theme.of(context).textTheme.headlineLarge,
+                        ),
+                      ),
+                      const SizedBox(height: ProkopaSpacing.xs),
+                      Text(
+                        _formatDate(DateTime.now()),
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                PopupMenuButton<JournalEntryType>(
-                  tooltip: 'Buat catatan',
-                  onSelected: _create,
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: JournalEntryType.free,
-                      child: Text('Catatan bebas'),
-                    ),
-                    PopupMenuItem(
-                      value: JournalEntryType.guided,
-                      child: Text('Refleksi terpandu'),
-                    ),
-                  ],
-                  icon: const ExcludeSemantics(
-                    child: Icon(Icons.add_circle, size: 32),
+                const SizedBox(width: ProkopaSpacing.lg),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: ProkopaRadius.mdBorder,
                   ),
-                  color: Theme.of(context).colorScheme.primary,
+                  child: PopupMenuButton<JournalEntryType>(
+                    tooltip: 'Buat catatan',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    onSelected: _create,
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: JournalEntryType.free,
+                        child: Text('Catatan bebas'),
+                      ),
+                      PopupMenuItem(
+                        value: JournalEntryType.guided,
+                        child: Text('Refleksi terpandu'),
+                      ),
+                    ],
+                    iconColor: Theme.of(context).colorScheme.onPrimary,
+                    icon: const ExcludeSemantics(child: Icon(Icons.add)),
+                  ),
                 ),
               ],
             ),
@@ -225,5 +250,32 @@ class _JournalScreenState extends State<JournalScreen> {
         ],
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+    return '${days[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
   }
 }

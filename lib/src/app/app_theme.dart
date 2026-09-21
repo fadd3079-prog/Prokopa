@@ -29,11 +29,11 @@ abstract final class ProkopaPalette {
   static const surfaceLight = Color(0xFFFFFFFF);
   static const borderLight = Color(0xFFE8EBF0);
 
-  static const backgroundDark = Color(0xFF121318);
-  static const surfaceDark = Color(0xFF1E2028);
-  static const borderDark = Color(0xFF2D3038);
-  static const textPrimaryDark = Color(0xFFE8EAED);
-  static const textSecondaryDark = Color(0xFF9AA0A6);
+  static const backgroundDark = Color(0xFF09090B);
+  static const surfaceDark = Color(0xFF18181B);
+  static const borderDark = Color(0xFF2B2B31);
+  static const textPrimaryDark = Color(0xFFF4F4F5);
+  static const textSecondaryDark = Color(0xFFA1A1AA);
 }
 
 abstract final class ProkopaSpacing {
@@ -166,21 +166,21 @@ abstract final class AppTheme {
       brightness: Brightness.dark,
       primary: const Color(0xFF8C9EFF),
       surface: ProkopaPalette.surfaceDark,
-      surfaceContainerHighest: ProkopaPalette.borderDark,
+      surfaceContainerHighest: const Color(0xFF27272A),
       surfaceContainerLow: ProkopaPalette.backgroundDark,
       onSurface: ProkopaPalette.textPrimaryDark,
       onSurfaceVariant: ProkopaPalette.textSecondaryDark,
-      outline: const Color(0xFF5F6368),
+      outline: const Color(0xFF71717A),
       outlineVariant: ProkopaPalette.borderDark,
     ),
     scaffoldBackgroundColor: ProkopaPalette.backgroundDark,
     useMaterial3: true,
     textTheme: _textTheme(ProkopaPalette.textPrimaryDark),
     navigationBarTheme: NavigationBarThemeData(
-      height: 72,
-      backgroundColor: ProkopaPalette.surfaceDark,
+      height: 80,
+      backgroundColor: const Color(0xFF111113),
       surfaceTintColor: Colors.transparent,
-      indicatorColor: const Color(0xFF8C9EFF).withValues(alpha: 0.16),
+      indicatorColor: const Color(0xFF8C9EFF).withValues(alpha: 0.14),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
@@ -218,7 +218,7 @@ abstract final class AppTheme {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: ProkopaPalette.surfaceDark,
+      fillColor: const Color(0xFF202024),
       border: OutlineInputBorder(
         borderRadius: ProkopaRadius.mdBorder,
         borderSide: const BorderSide(color: ProkopaPalette.borderDark),
@@ -237,7 +237,7 @@ abstract final class AppTheme {
       color: ProkopaPalette.surfaceDark,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: ProkopaRadius.lgBorder,
+        borderRadius: ProkopaRadius.xlBorder,
         side: const BorderSide(color: ProkopaPalette.borderDark),
       ),
       margin: EdgeInsets.zero,

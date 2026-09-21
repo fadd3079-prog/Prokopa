@@ -142,6 +142,9 @@ class _TodayScreenState extends State<TodayScreen> {
                       _Header(
                         name: widget.profileName,
                         onManage: _openHabitList,
+                        onCreate: _openQuickCreate,
+                        completed: completed,
+                        total: total,
                       ),
                       const SizedBox(height: ProkopaSpacing.xxxl),
                       _ProgressHero(
@@ -150,23 +153,9 @@ class _TodayScreenState extends State<TodayScreen> {
                         total: total,
                       ),
                       const SizedBox(height: ProkopaSpacing.xxxl),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Kebiasaan hari ini',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          IconButton(
-                            onPressed: _openQuickCreate,
-                            icon: const ExcludeSemantics(
-                              child: Icon(Icons.add_circle),
-                            ),
-                            color: Theme.of(context).colorScheme.primary,
-                            iconSize: 32,
-                            tooltip: 'Buat kebiasaan',
-                          ),
-                        ],
+                      Text(
+                        'Kebiasaan hari ini',
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: ProkopaSpacing.md),
                     ],
@@ -210,18 +199,19 @@ class _TodayScreenState extends State<TodayScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({this.name, required this.onManage});
+  const _Header({
+    this.name,
+    required this.onManage,
+    required this.onCreate,
+    required this.completed,
+    required this.total,
+  });
 
   final String? name;
   final VoidCallback onManage;
-
-  String get _greeting {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Selamat pagi';
-    if (hour < 15) return 'Selamat siang';
-    if (hour < 18) return 'Selamat sore';
-    return 'Selamat malam';
-  }
+  final VoidCallback onCreate;
+  final int completed;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
@@ -231,13 +221,31 @@ class _Header extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Semantics(
-                header: true,
-                child: Text(
-                  'Habits',
-                  style: Theme.of(context).textTheme.headlineLarge,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Habits',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                  ),
+                  const SizedBox(height: ProkopaSpacing.xs),
+                  Text(
+                    '${_formatDate(DateTime.now())} · $completed/$total selesai',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(width: ProkopaSpacing.sm),
+            IconButton.filled(
+              onPressed: onCreate,
+              tooltip: 'Buat kebiasaan',
+              icon: const ExcludeSemantics(child: Icon(Icons.add)),
             ),
             IconButton(
               onPressed: onManage,
@@ -246,18 +254,15 @@ class _Header extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: ProkopaSpacing.xs),
-        Text(
-          name != null ? '$_greeting, $name' : _greeting,
-          style: Theme.of(context).textTheme.bodyLarge
-              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: ProkopaSpacing.xs),
-        Text(
-          _formatDate(DateTime.now()),
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
+        if (name?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: ProkopaSpacing.sm),
+          Text(
+            'Daftar kebiasaan ${name?.trim() ?? ''}',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -304,72 +309,79 @@ class _ProgressHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDone = total > 0 && completed == total;
 
-    return Row(
-      children: [
-        SizedBox(
-          width: 80,
-          height: 80,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CircularProgressIndicator(
-                value: 1.0,
-                strokeWidth: 8,
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    return Card(
+      child: Padding(
+        padding: ProkopaSpacing.cardPadding,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 80,
+              height: 80,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CircularProgressIndicator(
+                    value: 1.0,
+                    strokeWidth: 8,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                  ),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: progress),
+                    duration: ProkopaAnimation.normal,
+                    curve: ProkopaAnimation.curve,
+                    builder: (context, value, _) => CircularProgressIndicator(
+                      value: value,
+                      strokeWidth: 8,
+                      color: isDone
+                          ? ProkopaPalette.success
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  Center(
+                    child: isDone
+                        ? const Icon(
+                            Icons.star_rounded,
+                            color: ProkopaPalette.success,
+                            size: 36,
+                          )
+                        : Text(
+                            '${(progress * 100).round()}%',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                  ),
+                ],
               ),
-              TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: 0, end: progress),
-                duration: ProkopaAnimation.normal,
-                curve: ProkopaAnimation.curve,
-                builder: (context, value, _) => CircularProgressIndicator(
-                  value: value,
-                  strokeWidth: 8,
-                  color: isDone
-                      ? ProkopaPalette.success
-                      : Theme.of(context).colorScheme.primary,
-                ),
+            ),
+            const SizedBox(width: ProkopaSpacing.xxl),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isDone
+                        ? 'Selesai semua!'
+                        : total == 0
+                        ? 'Siap dimulai'
+                        : 'Terus melangkah',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: ProkopaSpacing.xs),
+                  Text(
+                    total == 0
+                        ? 'Tambahkan kebiasaan pertama.'
+                        : '$completed selesai dari $total terjadwal.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-              Center(
-                child: isDone
-                    ? const Icon(
-                        Icons.star_rounded,
-                        color: ProkopaPalette.success,
-                        size: 36,
-                      )
-                    : Text(
-                        '${(progress * 100).round()}%',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(width: ProkopaSpacing.xxl),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isDone
-                    ? 'Selesai semua!'
-                    : total == 0
-                    ? 'Siap dimulai'
-                    : 'Terus melangkah',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: ProkopaSpacing.xs),
-              Text(
-                total == 0
-                    ? 'Tambahkan kebiasaan pertama.'
-                    : '$completed selesai dari $total terjadwal.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -461,14 +473,14 @@ class _HabitCard extends StatelessWidget {
       curve: ProkopaAnimation.curve,
       decoration: BoxDecoration(
         color: completed
-            ? Theme.of(context).colorScheme.surfaceContainerLow
+            ? ProkopaPalette.success.withValues(alpha: 0.08)
             : Theme.of(context).colorScheme.surface,
         borderRadius: ProkopaRadius.lgBorder,
         border: Border.all(
           color: completed
-              ? Theme.of(context).colorScheme.surfaceContainerHighest
-              : Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-          width: completed ? 1 : 1.5,
+              ? ProkopaPalette.success.withValues(alpha: 0.4)
+              : Theme.of(context).colorScheme.outlineVariant,
+          width: completed ? 1.5 : 1,
         ),
         boxShadow: completed
             ? []
@@ -552,6 +564,18 @@ class _HabitCard extends StatelessWidget {
                               ),
                         ),
                       ],
+                      if (!today.isWeeklyTarget) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _frequencyLabel(today.habit.draft.frequency),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -562,6 +586,12 @@ class _HabitCard extends StatelessWidget {
       ),
     );
   }
+
+  String _frequencyLabel(HabitFrequency frequency) => switch (frequency) {
+    HabitFrequency.daily => 'Setiap hari',
+    HabitFrequency.specificDays => 'Hari tertentu',
+    HabitFrequency.weeklyTarget => 'Target mingguan',
+  };
 }
 
 class _QuickHabitCreationSheet extends StatefulWidget {
@@ -609,54 +639,57 @@ class _QuickHabitCreationSheetState extends State<_QuickHabitCreationSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        24,
-        32,
-        24,
-        24 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Apa yang ingin kamu biasakan?',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: ProkopaSpacing.xl),
-          TextField(
-            controller: _title,
-            autofocus: true,
-            enabled: !_saving,
-            textCapitalization: TextCapitalization.sentences,
-            style: Theme.of(context).textTheme.titleLarge,
-            decoration: const InputDecoration(
-              hintText: 'Contoh: Bangun jam 5 pagi',
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              filled: false,
-              contentPadding: EdgeInsets.zero,
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          32,
+          24,
+          24 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Apa yang ingin kamu biasakan?',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            onSubmitted: (_) => _save(),
-          ),
-          const SizedBox(height: ProkopaSpacing.xxxl),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                child: const Text('Batal'),
+            const SizedBox(height: ProkopaSpacing.xl),
+            TextField(
+              controller: _title,
+              autofocus: true,
+              enabled: !_saving,
+              textCapitalization: TextCapitalization.sentences,
+              style: Theme.of(context).textTheme.titleLarge,
+              decoration: const InputDecoration(
+                hintText: 'Contoh: Bangun jam 5 pagi',
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+                contentPadding: EdgeInsets.zero,
               ),
-              const SizedBox(width: ProkopaSpacing.sm),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: Text(_saving ? 'Menyimpan...' : 'Tambah'),
-              ),
-            ],
-          ),
-        ],
+              onSubmitted: (_) => _save(),
+            ),
+            const SizedBox(height: ProkopaSpacing.xxxl),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: ProkopaSpacing.sm,
+              runSpacing: ProkopaSpacing.sm,
+              children: [
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Batal'),
+                ),
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving ? 'Menyimpan...' : 'Tambah'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
