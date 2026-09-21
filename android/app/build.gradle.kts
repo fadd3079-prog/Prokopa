@@ -10,6 +10,10 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+<<<<<<< HEAD
+=======
+        isCoreLibraryDesugaringEnabled = true
+>>>>>>> ae41a87e6beda91e9f6606e3b2f76b10d3024898
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -27,6 +31,10 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+<<<<<<< HEAD
+=======
+        multiDexEnabled = true
+>>>>>>> ae41a87e6beda91e9f6606e3b2f76b10d3024898
     }
 
     buildTypes {
@@ -38,6 +46,13 @@ android {
     }
 }
 
+<<<<<<< HEAD
+=======
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+>>>>>>> ae41a87e6beda91e9f6606e3b2f76b10d3024898
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
