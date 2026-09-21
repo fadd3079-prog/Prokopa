@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:prokopa/src/insights/insight_store.dart';
+import 'package:prokopa/src/journal/journal_body.dart';
 import 'package:prokopa/src/journal/journal_editor_screen.dart';
 import 'package:prokopa/src/journal/journal_entry.dart';
 import 'package:prokopa/src/journal/journal_store.dart';
@@ -10,10 +12,14 @@ class JournalScreen extends StatefulWidget {
     super.key,
     required this.store,
     required this.wellbeingStore,
+    required this.insightStore,
+    this.refreshVersion = 0,
   });
 
   final JournalStore store;
   final WellbeingStore wellbeingStore;
+  final InsightStore insightStore;
+  final int refreshVersion;
 
   @override
   State<JournalScreen> createState() => _JournalScreenState();
@@ -41,6 +47,14 @@ class _JournalScreenState extends State<JournalScreen> {
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant JournalScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _reload();
+    }
   }
 
   Future<void> _reload() async {
@@ -161,7 +175,10 @@ class _JournalScreenState extends State<JournalScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: ProkopaSpacing.xl, vertical: ProkopaSpacing.xxl),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ProkopaSpacing.xl,
+              vertical: ProkopaSpacing.xxl,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -183,166 +200,29 @@ class _JournalScreenState extends State<JournalScreen> {
                       child: Text('Refleksi terpandu'),
                     ),
                   ],
-                  icon: const Icon(Icons.add_circle, size: 32),
+                  icon: const ExcludeSemantics(
+                    child: Icon(Icons.add_circle, size: 32),
+                  ),
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ],
             ),
           ),
           Expanded(
-            child: entries == null
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                ? Center(
-                    child: FilledButton(
-                      onPressed: _reload,
-                      child: const Text('Coba lagi'),
-                    ),
-                  )
-                : entries.isEmpty
-                ? _JournalEmpty(onCreate: _create)
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: ProkopaSpacing.xl),
-                    itemCount: entries.length + (_hasMore || _loadingMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == entries.length) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Center(
-                            child: _loadingMore
-                                ? const CircularProgressIndicator()
-                                : OutlinedButton(
-                                    onPressed: _loadMore,
-                                    child: const Text('Muat lebih banyak'),
-                                  ),
-                          ),
-                        );
-                      }
-                      final entry = entries[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: ProkopaSpacing.md),
-                        child: _JournalCard(
-                          entry: entry,
-                          onTap: () => _open(entry),
-                        ),
-                      );
-                    },
-                  ),
+            child: JournalBody(
+              entries: entries,
+              error: _error,
+              hasMore: _hasMore,
+              isLoadingMore: _loadingMore,
+              insightStore: widget.insightStore,
+              refreshVersion: widget.refreshVersion,
+              onRefresh: _reload,
+              onLoadMore: _loadMore,
+              onOpen: _open,
+              onCreate: _create,
+            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _JournalCard extends StatelessWidget {
-  const _JournalCard({required this.entry, required this.onTap});
-
-  final JournalEntryPreview entry;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final title = entry.title?.isNotEmpty == true ? entry.title! : 'Tanpa judul';
-    final preview = entry.bodyPreview.isEmpty ? 'Draf kosong' : entry.bodyPreview.replaceAll('\n', ' ');
-
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: ProkopaRadius.lgBorder,
-        child: Padding(
-          padding: ProkopaSpacing.cardPadding,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (entry.status == JournalEntryStatus.draft)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Draf',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: ProkopaSpacing.sm),
-              Text(
-                preview,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _JournalEmpty extends StatelessWidget {
-  const _JournalEmpty({required this.onCreate});
-
-  final ValueChanged<JournalEntryType> onCreate;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: ProkopaSpacing.screenPadding,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.book_outlined,
-                size: 48,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-              ),
-            ),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            Text(
-              'Belum ada catatan.',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: ProkopaSpacing.sm),
-            Text(
-              'Tulis bebas atau gunakan satu pertanyaan sebagai awal.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            FilledButton.icon(
-              onPressed: () => onCreate(JournalEntryType.free),
-              icon: const Icon(Icons.edit),
-              label: const Text('Tulis Jurnal'),
-            ),
-          ],
-        ),
       ),
     );
   }

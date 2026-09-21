@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:prokopa/src/achievements/achievement_store.dart';
 import 'package:prokopa/src/backup/backup_service.dart';
+import 'package:prokopa/src/habits/dashboard_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/habits/today_screen.dart';
 import 'package:prokopa/src/journal/journal_screen.dart';
 import 'package:prokopa/src/journal/journal_store.dart';
-import 'package:prokopa/src/insights/insights_screen.dart';
 import 'package:prokopa/src/insights/insight_store.dart';
 import 'package:prokopa/src/profile/local_profile.dart';
 import 'package:prokopa/src/profile/profile_screen.dart';
@@ -63,38 +63,47 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   static const _destinations = [
     NavigationDestination(
-      icon: Icon(Icons.today_outlined),
-      selectedIcon: Icon(Icons.today),
+      icon: ExcludeSemantics(child: Icon(Icons.dashboard_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.dashboard)),
       label: 'Home',
     ),
     NavigationDestination(
-      icon: Icon(Icons.book_outlined),
-      selectedIcon: Icon(Icons.book),
+      icon: ExcludeSemantics(child: Icon(Icons.checklist_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.checklist)),
+      label: 'Habits',
+    ),
+    NavigationDestination(
+      icon: ExcludeSemantics(child: Icon(Icons.book_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.book)),
       label: 'Journal',
     ),
     NavigationDestination(
-      icon: Icon(Icons.assessment_outlined),
-      selectedIcon: Icon(Icons.assessment),
+      icon: ExcludeSemantics(child: Icon(Icons.assessment_outlined)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.assessment)),
       label: 'Progress',
     ),
     NavigationDestination(
-      icon: Icon(Icons.lightbulb_outline),
-      selectedIcon: Icon(Icons.lightbulb),
-      label: 'Insights',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.person_outline),
-      selectedIcon: Icon(Icons.person),
+      icon: ExcludeSemantics(child: Icon(Icons.person_outline)),
+      selectedIcon: ExcludeSemantics(child: Icon(Icons.person)),
       label: 'Profile',
     ),
   ];
 
   int _selectedIndex = 0;
   final _visited = <int>{0};
+  final _refreshVersions = List<int>.filled(_destinations.length, 0);
 
   @override
   Widget build(BuildContext context) {
     final screens = [
+      if (widget.habitStore != null)
+        DashboardScreen(
+          store: widget.habitStore!,
+          profileName: widget.profile?.name,
+          refreshVersion: _refreshVersions[0],
+        )
+      else
+        const _PlaceholderDestination(label: 'Home'),
       if (widget.habitStore != null)
         TodayScreen(
           store: widget.habitStore!,
@@ -104,11 +113,15 @@ class _AppShellState extends State<AppShell> {
           profileName: widget.profile?.name,
         )
       else
-        const _PlaceholderDestination(label: 'Home'),
-      if (widget.journalStore != null && widget.wellbeingStore != null)
+        const _PlaceholderDestination(label: 'Habits'),
+      if (widget.journalStore != null &&
+          widget.wellbeingStore != null &&
+          widget.insightStore != null)
         JournalScreen(
           store: widget.journalStore!,
           wellbeingStore: widget.wellbeingStore!,
+          insightStore: widget.insightStore!,
+          refreshVersion: _refreshVersions[2],
         )
       else
         const _PlaceholderDestination(label: 'Journal'),
@@ -120,10 +133,6 @@ class _AppShellState extends State<AppShell> {
         )
       else
         const _PlaceholderDestination(label: 'Progress'),
-      if (widget.insightStore != null)
-        InsightsScreen(store: widget.insightStore!)
-      else
-        const _PlaceholderDestination(label: 'Insights'),
       if (widget.profile != null &&
           widget.profileStore != null &&
           widget.onProfileChanged != null)
@@ -148,9 +157,7 @@ class _AppShellState extends State<AppShell> {
         index: _selectedIndex,
         children: [
           for (var index = 0; index < screens.length; index++)
-            _visited.contains(index)
-                ? screens[index]
-                : const SizedBox.shrink(),
+            _visited.contains(index) ? screens[index] : const SizedBox.shrink(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -158,6 +165,7 @@ class _AppShellState extends State<AppShell> {
         onDestinationSelected: (index) => setState(() {
           _selectedIndex = index;
           _visited.add(index);
+          _refreshVersions[index]++;
         }),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         animationDuration: MediaQuery.disableAnimationsOf(context)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_detail_screen.dart';
+import 'package:prokopa/src/habits/habit_list_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/app/app_theme.dart';
 import 'package:prokopa/src/journal/journal_store.dart';
@@ -92,6 +93,18 @@ class _TodayScreenState extends State<TodayScreen> {
     }
   }
 
+  Future<void> _openHabitList() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => HabitListScreen(
+          store: widget.store,
+          reminderService: widget.reminderService,
+        ),
+      ),
+    );
+    await _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -107,7 +120,7 @@ class _TodayScreenState extends State<TodayScreen> {
         ),
       );
     }
-    
+
     final habits = _habits!;
     final completed = habits.where((h) => h.isComplete).length;
     final total = habits.length;
@@ -126,17 +139,29 @@ class _TodayScreenState extends State<TodayScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: ProkopaSpacing.sm),
-                      _Header(name: widget.profileName),
+                      _Header(
+                        name: widget.profileName,
+                        onManage: _openHabitList,
+                      ),
                       const SizedBox(height: ProkopaSpacing.xxxl),
-                      _ProgressHero(progress: progress, completed: completed, total: total),
+                      _ProgressHero(
+                        progress: progress,
+                        completed: completed,
+                        total: total,
+                      ),
                       const SizedBox(height: ProkopaSpacing.xxxl),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Kebiasaan hari ini', style: Theme.of(context).textTheme.titleLarge),
+                          Text(
+                            'Kebiasaan hari ini',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
                           IconButton(
                             onPressed: _openQuickCreate,
-                            icon: const Icon(Icons.add_circle),
+                            icon: const ExcludeSemantics(
+                              child: Icon(Icons.add_circle),
+                            ),
                             color: Theme.of(context).colorScheme.primary,
                             iconSize: 32,
                             tooltip: 'Buat kebiasaan',
@@ -154,25 +179,28 @@ class _TodayScreenState extends State<TodayScreen> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: ProkopaSpacing.xl),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: ProkopaSpacing.xl,
+                  ),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final today = habits[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: ProkopaSpacing.md),
-                          child: _HabitCard(
-                            today: today,
-                            onToggle: () => _toggleComplete(today),
-                            onTap: () => _openDetail(today.habit),
-                          ),
-                        );
-                      },
-                      childCount: habits.length,
-                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final today = habits[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: ProkopaSpacing.md,
+                        ),
+                        child: _HabitCard(
+                          today: today,
+                          onToggle: () => _toggleComplete(today),
+                          onTap: () => _openDetail(today.habit),
+                        ),
+                      );
+                    }, childCount: habits.length),
                   ),
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: ProkopaSpacing.huge)),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: ProkopaSpacing.huge),
+              ),
             ],
           ),
         ),
@@ -182,8 +210,10 @@ class _TodayScreenState extends State<TodayScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({this.name});
+  const _Header({this.name, required this.onManage});
+
   final String? name;
+  final VoidCallback onManage;
 
   String get _greeting {
     final hour = DateTime.now().hour;
@@ -198,30 +228,74 @@ class _Header extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  'Habits',
+                  style: Theme.of(context).textTheme.headlineLarge,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: onManage,
+              tooltip: 'Kelola habits',
+              icon: const ExcludeSemantics(child: Icon(Icons.tune)),
+            ),
+          ],
+        ),
+        const SizedBox(height: ProkopaSpacing.xs),
         Text(
           name != null ? '$_greeting, $name' : _greeting,
-          style: Theme.of(context).textTheme.headlineLarge,
+          style: Theme.of(context).textTheme.bodyLarge
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: ProkopaSpacing.xs),
         Text(
           _formatDate(DateTime.now()),
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ],
     );
   }
 
   String _formatDate(DateTime date) {
-    const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
     return '${days[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
   }
 }
 
 class _ProgressHero extends StatelessWidget {
-  const _ProgressHero({required this.progress, required this.completed, required this.total});
+  const _ProgressHero({
+    required this.progress,
+    required this.completed,
+    required this.total,
+  });
   final double progress;
   final int completed;
   final int total;
@@ -229,7 +303,7 @@ class _ProgressHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDone = total > 0 && completed == total;
-    
+
     return Row(
       children: [
         SizedBox(
@@ -250,16 +324,22 @@ class _ProgressHero extends StatelessWidget {
                 builder: (context, value, _) => CircularProgressIndicator(
                   value: value,
                   strokeWidth: 8,
-                  color: isDone ? ProkopaPalette.success : Theme.of(context).colorScheme.primary,
+                  color: isDone
+                      ? ProkopaPalette.success
+                      : Theme.of(context).colorScheme.primary,
                 ),
               ),
               Center(
                 child: isDone
-                  ? const Icon(Icons.star_rounded, color: ProkopaPalette.success, size: 36)
-                  : Text(
-                      '${(progress * 100).round()}%',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+                    ? const Icon(
+                        Icons.star_rounded,
+                        color: ProkopaPalette.success,
+                        size: 36,
+                      )
+                    : Text(
+                        '${(progress * 100).round()}%',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
               ),
             ],
           ),
@@ -270,18 +350,18 @@ class _ProgressHero extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isDone 
-                  ? 'Selesai semua!' 
-                  : total == 0 
-                    ? 'Siap dimulai' 
+                isDone
+                    ? 'Selesai semua!'
+                    : total == 0
+                    ? 'Siap dimulai'
                     : 'Terus melangkah',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: ProkopaSpacing.xs),
               Text(
-                total == 0 
-                  ? 'Tambahkan kebiasaan pertama.' 
-                  : '$completed selesai dari $total terjadwal.',
+                total == 0
+                    ? 'Tambahkan kebiasaan pertama.'
+                    : '$completed selesai dari $total terjadwal.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -301,13 +381,19 @@ class _EmptyToday extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: ProkopaSpacing.xl, vertical: ProkopaSpacing.huge),
+      padding: const EdgeInsets.symmetric(
+        horizontal: ProkopaSpacing.xl,
+        vertical: ProkopaSpacing.huge,
+      ),
       child: Container(
         padding: ProkopaSpacing.cardPadding,
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: ProkopaRadius.xlBorder,
-          border: Border.all(color: Theme.of(context).colorScheme.surfaceContainerHighest, width: 1),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            width: 1,
+          ),
         ),
         child: Column(
           children: [
@@ -317,10 +403,13 @@ class _EmptyToday extends StatelessWidget {
                 color: Theme.of(context).colorScheme.surface,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.spa_rounded,
-                size: 48,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+              child: ExcludeSemantics(
+                child: Icon(
+                  Icons.spa_rounded,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.primary
+                      .withValues(alpha: 0.5),
+                ),
               ),
             ),
             const SizedBox(height: ProkopaSpacing.xxl),
@@ -366,28 +455,31 @@ class _HabitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completed = today.isComplete;
-    
+
     return AnimatedContainer(
       duration: ProkopaAnimation.fast,
       curve: ProkopaAnimation.curve,
       decoration: BoxDecoration(
-        color: completed 
-            ? Theme.of(context).colorScheme.surfaceContainerLow 
+        color: completed
+            ? Theme.of(context).colorScheme.surfaceContainerLow
             : Theme.of(context).colorScheme.surface,
         borderRadius: ProkopaRadius.lgBorder,
         border: Border.all(
-          color: completed 
-              ? Theme.of(context).colorScheme.surfaceContainerHighest 
+          color: completed
+              ? Theme.of(context).colorScheme.surfaceContainerHighest
               : Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
           width: completed ? 1 : 1.5,
         ),
-        boxShadow: completed ? [] : [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: completed
+            ? []
+            : [
+                BoxShadow(
+                  color: Theme.of(context).colorScheme.shadow
+                      .withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -399,25 +491,36 @@ class _HabitCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             child: Row(
               children: [
-                GestureDetector(
-                  onTap: onToggle,
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedSwitcher(
-                    duration: ProkopaAnimation.fast,
-                    transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
-                    child: completed
-                        ? Icon(
-                            Icons.check_circle_rounded,
-                            key: const ValueKey('checked'),
-                            size: 32,
-                            color: ProkopaPalette.success,
-                          )
-                        : Icon(
-                            Icons.circle_outlined,
-                            key: const ValueKey('unchecked'),
-                            size: 32,
-                            color: Theme.of(context).colorScheme.primary,
+                Semantics(
+                  button: true,
+                  label: today.habit.draft.title,
+                  value: completed ? 'Selesai' : 'Belum selesai',
+                  child: GestureDetector(
+                    onTap: onToggle,
+                    behavior: HitTestBehavior.opaque,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 44,
+                      ),
+                      child: Center(
+                        child: ExcludeSemantics(
+                          child: AnimatedSwitcher(
+                            duration: ProkopaAnimation.fast,
+                            child: Icon(
+                              completed
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                              key: ValueKey(completed),
+                              size: 32,
+                              color: completed
+                                  ? ProkopaPalette.success
+                                  : Theme.of(context).colorScheme.primary,
+                            ),
                           ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: ProkopaSpacing.lg),
@@ -428,10 +531,12 @@ class _HabitCard extends StatelessWidget {
                       AnimatedDefaultTextStyle(
                         duration: ProkopaAnimation.fast,
                         style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                          color: completed 
-                              ? Theme.of(context).colorScheme.onSurfaceVariant 
+                          color: completed
+                              ? Theme.of(context).colorScheme.onSurfaceVariant
                               : Theme.of(context).colorScheme.onSurface,
-                          decoration: completed ? TextDecoration.lineThrough : null,
+                          decoration: completed
+                              ? TextDecoration.lineThrough
+                              : null,
                         ),
                         child: Text(today.habit.draft.title),
                       ),
@@ -439,9 +544,12 @@ class _HabitCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           '${today.completedThisWeek}/${today.weeklyTarget} minggu ini',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                         ),
                       ],
                     ],
@@ -461,7 +569,8 @@ class _QuickHabitCreationSheet extends StatefulWidget {
   final HabitStore store;
 
   @override
-  State<_QuickHabitCreationSheet> createState() => _QuickHabitCreationSheetState();
+  State<_QuickHabitCreationSheet> createState() =>
+      _QuickHabitCreationSheetState();
 }
 
 class _QuickHabitCreationSheetState extends State<_QuickHabitCreationSheet> {
@@ -477,7 +586,7 @@ class _QuickHabitCreationSheetState extends State<_QuickHabitCreationSheet> {
   Future<void> _save() async {
     final title = _title.text.trim();
     if (title.isEmpty) return;
-    
+
     setState(() => _saving = true);
     try {
       await widget.store.create(

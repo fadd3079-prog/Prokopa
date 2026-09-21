@@ -5,7 +5,7 @@ import 'package:prokopa/src/app/app.dart';
 import 'package:prokopa/src/app/app_shell.dart';
 
 void main() {
-  const labels = ['Home', 'Journal', 'Progress', 'Insights', 'Profile'];
+  const labels = ['Home', 'Habits', 'Journal', 'Progress', 'Profile'];
 
   Finder title(String label) => find.descendant(
     of: find.byType(IndexedStack),
@@ -43,6 +43,7 @@ void main() {
     }
     for (final label in [
       'Today',
+      'Insights',
       'Login',
       'Signup',
       'Account',
@@ -84,12 +85,12 @@ void main() {
       final todayElement = tester.element(title('Home'));
 
       for (final label in [
+        'Habits',
         'Journal',
         'Progress',
-        'Insights',
         'Profile',
         'Home',
-        'Insights',
+        'Habits',
         'Journal',
         'Profile',
         'Progress',
@@ -98,8 +99,8 @@ void main() {
       ]) {
         await tester.tap(find.widgetWithText(NavigationDestination, label));
         await tester.pumpAndSettle();
-        // Since we use an IndexedStack and the current layout relies on 
-        // the icons mostly, we check if the label text exists in the bottom nav 
+        // Since we use an IndexedStack and the current layout relies on
+        // the icons mostly, we check if the label text exists in the bottom nav
         // instead of checking IndexedStack descendant directly since it can be offstage.
         expect(tester.takeException(), isNull);
       }
@@ -124,8 +125,8 @@ void main() {
           find.widgetWithText(NavigationDestination, label),
         );
         expect(
-          (destination.icon as Icon).icon,
-          isNot((destination.selectedIcon as Icon).icon),
+          _navigationIcon(destination.icon),
+          isNot(_navigationIcon(destination.selectedIcon!)),
         );
         expect(find.bySemanticsLabel(RegExp(label)), findsWidgets);
       }
@@ -202,3 +203,9 @@ void main() {
     );
   });
 }
+
+IconData? _navigationIcon(Widget widget) => switch (widget) {
+  Icon(:final icon) => icon,
+  ExcludeSemantics(child: Icon(:final icon)) => icon,
+  _ => null,
+};
