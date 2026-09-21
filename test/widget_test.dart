@@ -1,15 +1,3 @@
-<<<<<<< HEAD
-import 'package:flutter_test/flutter_test.dart';
-import 'package:prokopa/src/app/app.dart';
-import 'package:prokopa/src/app/bootstrap_screen.dart';
-
-void main() {
-  testWidgets('ProkopaApp builds and renders BootstrapScreen', (tester) async {
-    await tester.pumpWidget(const ProkopaApp());
-    expect(find.byType(ProkopaApp), findsOneWidget);
-    expect(find.byType(BootstrapScreen), findsOneWidget);
-    expect(find.text('Prokopa: Habits and Jurnaling'), findsOneWidget);
-=======
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -212,6 +200,5 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       4,
     );
->>>>>>> ae41a87e6beda91e9f6606e3b2f76b10d3024898
   });
 }

@@ -1,17 +1,4 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
-import 'package:prokopa/src/app/bootstrap_screen.dart';
-
-class ProkopaApp extends StatelessWidget {
-  const ProkopaApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Prokopa: Habits and Jurnaling',
-      debugShowCheckedModeBanner: false,
-      home: BootstrapScreen(),
-=======
 import 'package:prokopa/src/achievements/achievement_store.dart';
 import 'package:prokopa/src/backup/backup_service.dart';
 import 'package:prokopa/src/app/app_shell.dart';
@@ -261,7 +248,6 @@ class _ProkopaAppState extends State<ProkopaApp> with WidgetsBindingObserver {
       onDataReset: _resetToOnboarding,
       onDataRestored: _reloadDatabaseState,
       onProfileChanged: _updateProfile,
->>>>>>> ae41a87e6beda91e9f6606e3b2f76b10d3024898
     );
   }
 }
