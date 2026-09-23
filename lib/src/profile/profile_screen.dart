@@ -15,8 +15,8 @@ import 'package:prokopa/src/app/prokopa_logo.dart';
 import 'package:prokopa/src/app/app_theme.dart';
 import 'package:prokopa/src/core/constants/brand_constants.dart';
 
-class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({
     super.key,
     required this.profile,
     required this.store,
@@ -44,11 +44,12 @@ class ProfileScreen extends StatefulWidget {
   final HabitReminderService? habitReminderService;
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _name;
+  late LocalProfile _profile;
   late String _avatar;
   late AppAppearance _appearance;
   var _editing = false;
@@ -58,9 +59,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.profile.name);
-    _avatar = widget.profile.avatar;
-    _appearance = widget.profile.appearance;
+    _profile = widget.profile;
+    _name = TextEditingController(text: _profile.name);
+    _avatar = _profile.avatar;
+    _appearance = _profile.appearance;
   }
 
   @override
@@ -79,7 +81,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _saving = true;
       _error = null;
     });
-    final updated = widget.profile.copyWith(
+    final updated = _profile.copyWith(
       name: name,
       avatar: _avatar,
       appearance: _appearance,
@@ -91,6 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       widget.onChanged(updated);
       setState(() {
+        _profile = updated;
         _saving = false;
         _editing = false;
       });
@@ -106,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.profile.name.trim();
+    final name = _profile.name.trim();
     final initials = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
 
     return SafeArea(
@@ -121,13 +124,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Semantics(
                   header: true,
                   child: Text(
-                    'Profile',
+                    'Settings',
                     style: Theme.of(context).textTheme.headlineLarge,
                   ),
                 ),
                 const SizedBox(height: ProkopaSpacing.xs),
                 Text(
-                  'Kelola identitas lokal dan preferensi aplikasi.',
+                  'Kelola profil lokal, privasi, dan preferensi aplikasi.',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -142,7 +145,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           radius: 34,
                           backgroundColor: _avatarColor(
                             context,
-                            widget.profile.avatar,
+                            _profile.avatar,
                           ),
                           child: Text(
                             initials,
@@ -158,7 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                widget.profile.name,
+                                _profile.name,
                                 style: Theme.of(context).textTheme.titleLarge,
                               ),
                               const SizedBox(height: ProkopaSpacing.xs),
@@ -274,7 +277,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: ProkopaSpacing.xs),
                   Text(
-                    'Versi 0.1.0',
+                    'Versi 1.2.0',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -334,8 +337,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ? null
                       : () => setState(() {
                           _editing = false;
-                          _name.text = widget.profile.name;
-                          _appearance = widget.profile.appearance;
+                          _name.text = _profile.name;
+                          _appearance = _profile.appearance;
                         }),
                   child: const Text('Batal'),
                 ),

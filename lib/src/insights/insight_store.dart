@@ -275,28 +275,30 @@ class InsightStore {
     required String observation,
     required String evidence,
     required String action,
-  }) async {
-    final existing = await _database.query(
-      'insights',
-      columns: ['dismissed_at'],
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    if (existing.singleOrNull?['dismissed_at'] != null) {
-      return;
-    }
-    await _database.insert('insights', {
-      'id': id,
-      'type': type,
-      'period_start': localDateKey(start),
-      'period_end': localDateKey(end),
-      'observation': observation,
-      'evidence': evidence,
-      'action': action,
-      'dismissed_at': null,
-      'created_at': utcTimestamp(DateTime.now()),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }) {
+    return _database.transaction((transaction) async {
+      final existing = await transaction.query(
+        'insights',
+        columns: ['dismissed_at'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (existing.singleOrNull?['dismissed_at'] != null) {
+        return;
+      }
+      await transaction.insert('insights', {
+        'id': id,
+        'type': type,
+        'period_start': localDateKey(start),
+        'period_end': localDateKey(end),
+        'observation': observation,
+        'evidence': evidence,
+        'action': action,
+        'dismissed_at': null,
+        'created_at': utcTimestamp(DateTime.now()),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
   }
 
   Future<List<LocalInsight>> list({bool includeDismissed = false}) async {

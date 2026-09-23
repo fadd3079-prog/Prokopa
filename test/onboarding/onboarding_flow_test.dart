@@ -28,22 +28,29 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
+    for (var attempt = 0; attempt < 50; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+      if (finder.evaluate().isNotEmpty) {
+        return;
+      }
+    }
+  }
+
   testWidgets('fresh local database enters onboarding and reaches Dashboard', (
     tester,
   ) async {
     final database = await openTestDatabase(tester);
-    await tester.pumpWidget(
-      ProkopaApp(database: database, enableFeatureScreens: false),
-    );
+    await tester.pumpWidget(ProkopaApp(database: database));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Selamat datang.'),
-      findsOneWidget,
-    );
+    expect(find.text('Selamat datang.'), findsOneWidget);
     await completeOnboarding(tester);
 
     expect(find.byType(AppShell), findsOneWidget);
@@ -72,24 +79,21 @@ void main() {
     await tester.pump();
 
     expect(find.byType(AppShell), findsOneWidget);
-    expect(
-      find.text('Selamat datang.'),
-      findsNothing,
-    );
+    expect(find.text('Selamat datang.'), findsNothing);
   });
 
-  testWidgets('Profile edits local name avatar and appearance', (tester) async {
+  testWidgets('Settings edits local name and appearance', (tester) async {
     final database = await openTestDatabase(tester);
-    await tester.pumpWidget(
-      ProkopaApp(database: database, enableFeatureScreens: false),
-    );
+    await tester.pumpWidget(ProkopaApp(database: database));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pumpAndSettle();
     await completeOnboarding(tester);
 
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Profile'));
+    final settingsButton = find.byTooltip('Buka pengaturan');
+    await pumpUntilFound(tester, settingsButton);
+    await tester.tap(settingsButton);
     await tester.pumpAndSettle();
     expect(find.text('Rani'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.edit_outlined));
@@ -104,7 +108,7 @@ void main() {
 
     expect(find.text('Dita'), findsOneWidget);
     expect(
-      Theme.of(tester.element(find.byType(AppShell))).brightness,
+      Theme.of(tester.element(find.text('Dita'))).brightness,
       Brightness.dark,
     );
   });

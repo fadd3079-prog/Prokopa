@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
+import 'package:prokopa/src/app/app_components.dart';
+import 'package:prokopa/src/app/app_date_controller.dart';
+import 'package:prokopa/src/app/app_theme.dart';
 import 'package:prokopa/src/habits/habit.dart';
-import 'package:prokopa/src/habits/habit_detail_screen.dart';
+import 'package:prokopa/src/habits/habit_form_screen.dart';
 import 'package:prokopa/src/habits/habit_list_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
-import 'package:prokopa/src/app/app_theme.dart';
 import 'package:prokopa/src/journal/journal_store.dart';
 import 'package:prokopa/src/notifications/habit_reminder_service.dart';
+import 'package:prokopa/src/wellbeing/sleep_input_sheet.dart';
 import 'package:prokopa/src/wellbeing/wellbeing_store.dart';
 
 class TodayScreen extends StatefulWidget {
@@ -15,81 +20,217 @@ class TodayScreen extends StatefulWidget {
     this.reminderService,
     this.journalStore,
     this.wellbeingStore,
+    this.dateController,
+    this.onSettings,
     this.profileName,
+    this.refreshVersion = 0,
   });
 
   final HabitStore store;
   final HabitReminderService? reminderService;
   final JournalStore? journalStore;
   final WellbeingStore? wellbeingStore;
+  final AppDateController? dateController;
+  final VoidCallback? onSettings;
   final String? profileName;
+  final int refreshVersion;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
 }
 
 class _TodayScreenState extends State<TodayScreen> {
+  late final AppDateController _dateController;
+  late final bool _ownsDateController;
   List<TodayHabit>? _habits;
+  Map<String, HabitProgress> _progressByHabit = const {};
+  SleepRecord? _sleep;
   var _loading = true;
+  var _loadVersion = 0;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _ownsDateController = widget.dateController == null;
+    _dateController = widget.dateController ?? AppDateController();
+    _dateController.addListener(_reload);
     _reload();
   }
 
+  @override
+  void didUpdateWidget(covariant TodayScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _reload();
+    }
+  }
+
+  @override
+  void dispose() {
+    _dateController.removeListener(_reload);
+    if (_ownsDateController) {
+      _dateController.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _reload() async {
+    final version = ++_loadVersion;
+    if (mounted && _habits == null) {
+      setState(() => _loading = true);
+    }
     try {
-      final habits = await widget.store.loadToday();
-      if (mounted) {
+      final date = _dateController.selectedDate;
+      final habits = await widget.store.loadToday(now: date);
+      final progress = await widget.store.progress(now: date);
+      SleepRecord? sleep;
+      final wellbeingStore = widget.wellbeingStore;
+      if (wellbeingStore != null) {
+        sleep = (await wellbeingStore.listSleep(
+          from: date,
+          to: date,
+        )).firstOrNull;
+      }
+      if (mounted && version == _loadVersion) {
         setState(() {
           _habits = habits;
+          _progressByHabit = {for (final item in progress) item.habit.id: item};
+          _sleep = sleep;
           _loading = false;
+          _error = null;
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && version == _loadVersion) {
         setState(() {
           _loading = false;
-          _error = 'Gagal memuat kebiasaan.';
+          _error = 'Kebiasaan belum dapat dimuat. Coba lagi.';
         });
       }
     }
   }
 
-  Future<void> _openQuickCreate() async {
-    final created = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => _QuickHabitCreationSheet(store: widget.store),
-    );
-    if (created == true) {
-      await _reload();
-    }
-  }
-
-  Future<void> _toggleComplete(TodayHabit today) async {
-    if (today.isComplete) {
-      await widget.store.undo(today.habit);
-    } else {
-      await widget.store.complete(today.habit);
-    }
-    await _reload();
-  }
-
-  Future<void> _openDetail(Habit habit) async {
+  Future<void> _createHabit() async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => HabitDetailScreen(
+        builder: (_) => HabitFormScreen(
           store: widget.store,
-          habit: habit,
           reminderService: widget.reminderService,
         ),
       ),
     );
     if (changed == true) {
       await _reload();
+    }
+  }
+
+  Future<void> _toggleComplete(TodayHabit today) async {
+    try {
+      if (today.isComplete) {
+        await widget.store.undo(
+          today.habit,
+          date: _dateController.selectedDate,
+        );
+      } else {
+        await widget.store.complete(
+          today.habit,
+          date: _dateController.selectedDate,
+        );
+      }
+      await HapticFeedback.selectionClick();
+      await _reload();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Status pada tanggal ini belum dapat diubah.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _manageHabit(Habit habit) async {
+    final action = await showModalBottomSheet<_HabitAction>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const ExcludeSemantics(child: Icon(Icons.edit_outlined)),
+              title: const Text('Edit'),
+              onTap: () => Navigator.of(context).pop(_HabitAction.edit),
+            ),
+            ListTile(
+              leading: const ExcludeSemantics(
+                child: Icon(Icons.pause_outlined),
+              ),
+              title: const Text('Jeda'),
+              onTap: () => Navigator.of(context).pop(_HabitAction.pause),
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Hapus',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              onTap: () => Navigator.of(context).pop(_HabitAction.delete),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case _HabitAction.edit:
+        final changed = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => HabitFormScreen(
+              store: widget.store,
+              habit: habit,
+              reminderService: widget.reminderService,
+            ),
+          ),
+        );
+        if (changed == true) {
+          await _reload();
+        }
+      case _HabitAction.pause:
+        await widget.store.pause(habit);
+        await widget.reminderService?.cancel(habit);
+        await _reload();
+      case _HabitAction.delete:
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Hapus kebiasaan?'),
+            content: Text(
+              '${habit.draft.title} dan seluruh riwayatnya akan dihapus dari perangkat ini.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Hapus'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true) {
+          await widget.reminderService?.cancel(habit);
+          await widget.store.delete(habit);
+          await _reload();
+        }
     }
   }
 
@@ -105,90 +246,139 @@ class _TodayScreenState extends State<TodayScreen> {
     await _reload();
   }
 
+  Future<void> _openSleep() async {
+    final store = widget.wellbeingStore;
+    if (store == null) {
+      return;
+    }
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SleepInputSheet(
+        store: store,
+        date: _dateController.selectedDate,
+        record: _sleep,
+      ),
+    );
+    if (changed == true) {
+      await _reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (_error != null) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(
-          child: FilledButton(
-            onPressed: _reload,
-            child: const Text('Coba lagi'),
+          child: CircularProgressIndicator(semanticsLabel: 'Memuat kebiasaan'),
+        ),
+      );
+    }
+    if (_error case final error?) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(error),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _reload,
+                  child: const Text('Coba lagi'),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
     final habits = _habits!;
-    final completed = habits.where((h) => h.isComplete).length;
-    final total = habits.length;
-    final progress = total == 0 ? 0.0 : completed / total;
-
+    final completed = habits.where((habit) => habit.isComplete).length;
+    final progress = habits.isEmpty ? 0.0 : completed / habits.length;
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _reload,
           child: CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: ProkopaSpacing.cardPadding,
+              SliverPadding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 24, 16, 0),
+                sliver: SliverToBoxAdapter(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: ProkopaSpacing.sm),
-                      _Header(
-                        name: widget.profileName,
-                        onManage: _openHabitList,
-                        onCreate: _openQuickCreate,
+                      _HabitsHeader(
+                        date: _dateController.selectedDate,
                         completed: completed,
-                        total: total,
+                        total: habits.length,
+                        onCreate: _createHabit,
+                        onSettings: widget.onSettings ?? () {},
                       ),
-                      const SizedBox(height: ProkopaSpacing.xxxl),
-                      _ProgressHero(
-                        progress: progress,
-                        completed: completed,
-                        total: total,
-                      ),
-                      const SizedBox(height: ProkopaSpacing.xxxl),
-                      Text(
-                        'Kebiasaan hari ini',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: ProkopaSpacing.md),
+                      const SizedBox(height: 24),
+                      _DateBar(controller: _dateController),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
               if (habits.isEmpty)
                 SliverToBoxAdapter(
-                  child: _EmptyToday(onCreate: _openQuickCreate),
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.symmetric(
+                      horizontal: 16,
+                    ),
+                    child: _EmptyHabits(onCreate: _createHabit),
+                  ),
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: ProkopaSpacing.xl,
+                  padding: const EdgeInsetsDirectional.symmetric(
+                    horizontal: 16,
                   ),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
+                  sliver: SliverList.separated(
+                    itemCount: habits.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
                       final today = habits[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: ProkopaSpacing.md,
-                        ),
-                        child: _HabitCard(
-                          today: today,
-                          onToggle: () => _toggleComplete(today),
-                          onTap: () => _openDetail(today.habit),
-                        ),
+                      return _HabitCard(
+                        key: ValueKey(today.habit.id),
+                        today: today,
+                        progress: _progressByHabit[today.habit.id],
+                        sortOrder: index.toDouble(),
+                        onToggle: () => _toggleComplete(today),
+                        onManage: () => _manageHabit(today.habit),
                       );
-                    }, childCount: habits.length),
+                    },
                   ),
                 ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: ProkopaSpacing.huge),
+              SliverPadding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 24, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: _TodayProgress(progress: progress),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: _HabitsSleepCard(record: _sleep, onTap: _openSleep),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 48),
+                sliver: SliverToBoxAdapter(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: _openHabitList,
+                      icon: const ExcludeSemantics(
+                        child: Icon(Icons.tune, size: 18),
+                      ),
+                      label: const Text('Kelola semua kebiasaan'),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -198,385 +388,205 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    this.name,
-    required this.onManage,
+class _HabitsHeader extends StatelessWidget {
+  const _HabitsHeader({
+    required this.date,
+    required this.completed,
+    required this.total,
     required this.onCreate,
-    required this.completed,
-    required this.total,
+    required this.onSettings,
   });
 
-  final String? name;
-  final VoidCallback onManage;
-  final VoidCallback onCreate;
+  final DateTime date;
   final int completed;
   final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      'Habits',
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                  ),
-                  const SizedBox(height: ProkopaSpacing.xs),
-                  Text(
-                    '${_formatDate(DateTime.now())} · $completed/$total selesai',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: ProkopaSpacing.sm),
-            IconButton.filled(
-              onPressed: onCreate,
-              tooltip: 'Buat kebiasaan',
-              icon: const ExcludeSemantics(child: Icon(Icons.add)),
-            ),
-            IconButton(
-              onPressed: onManage,
-              tooltip: 'Kelola habits',
-              icon: const ExcludeSemantics(child: Icon(Icons.tune)),
-            ),
-          ],
-        ),
-        if (name?.trim().isNotEmpty == true) ...[
-          const SizedBox(height: ProkopaSpacing.sm),
-          Text(
-            'Daftar kebiasaan ${name?.trim() ?? ''}',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    const days = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu',
-    ];
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des',
-    ];
-    return '${days[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-}
-
-class _ProgressHero extends StatelessWidget {
-  const _ProgressHero({
-    required this.progress,
-    required this.completed,
-    required this.total,
-  });
-  final double progress;
-  final int completed;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDone = total > 0 && completed == total;
-
-    return Card(
-      child: Padding(
-        padding: ProkopaSpacing.cardPadding,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 80,
-              height: 80,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CircularProgressIndicator(
-                    value: 1.0,
-                    strokeWidth: 8,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                  ),
-                  TweenAnimationBuilder<double>(
-                    tween: Tween<double>(begin: 0, end: progress),
-                    duration: ProkopaAnimation.normal,
-                    curve: ProkopaAnimation.curve,
-                    builder: (context, value, _) => CircularProgressIndicator(
-                      value: value,
-                      strokeWidth: 8,
-                      color: isDone
-                          ? ProkopaPalette.success
-                          : Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  Center(
-                    child: isDone
-                        ? const Icon(
-                            Icons.star_rounded,
-                            color: ProkopaPalette.success,
-                            size: 36,
-                          )
-                        : Text(
-                            '${(progress * 100).round()}%',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: ProkopaSpacing.xxl),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isDone
-                        ? 'Selesai semua!'
-                        : total == 0
-                        ? 'Siap dimulai'
-                        : 'Terus melangkah',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: ProkopaSpacing.xs),
-                  Text(
-                    total == 0
-                        ? 'Tambahkan kebiasaan pertama.'
-                        : '$completed selesai dari $total terjadwal.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyToday extends StatelessWidget {
-  const _EmptyToday({required this.onCreate});
   final VoidCallback onCreate;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: ProkopaSpacing.xl,
-        vertical: ProkopaSpacing.huge,
-      ),
-      child: Container(
-        padding: ProkopaSpacing.cardPadding,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: ProkopaRadius.xlBorder,
-          border: Border.all(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            width: 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                shape: BoxShape.circle,
-              ),
-              child: ExcludeSemantics(
-                child: Icon(
-                  Icons.spa_rounded,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.primary
-                      .withValues(alpha: 0.5),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact =
+            constraints.maxWidth < 340 ||
+            MediaQuery.textScalerOf(context).scale(14) > 20;
+        return AppPageHeader(
+          title: 'Habits',
+          subtitle: '${formatFullDate(date)} · $completed/$total selesai',
+          onSettings: onSettings,
+          trailing: compact
+              ? Semantics(
+                  button: true,
+                  label: 'Tambah kebiasaan',
+                  child: IconButton.filled(
+                    onPressed: onCreate,
+                    tooltip: 'Tambah kebiasaan',
+                    icon: const ExcludeSemantics(child: Icon(Icons.add)),
+                  ),
+                )
+              : FilledButton.icon(
+                  onPressed: onCreate,
+                  icon: const ExcludeSemantics(
+                    child: Icon(Icons.add, size: 18),
+                  ),
+                  label: const Text('Tambah'),
                 ),
-              ),
-            ),
-            const SizedBox(height: ProkopaSpacing.xxl),
-            Text(
-              'Ruang ini masih kosong',
-              style: Theme.of(context).textTheme.titleLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: ProkopaSpacing.sm),
-            Text(
-              'Mulai dengan satu tindakan kecil hari ini.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: onCreate,
-                child: const Text('Buat Kebiasaan'),
-              ),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class _HabitCard extends StatelessWidget {
-  const _HabitCard({
-    required this.today,
-    required this.onToggle,
+class _DateBar extends StatefulWidget {
+  const _DateBar({required this.controller});
+
+  final AppDateController controller;
+
+  @override
+  State<_DateBar> createState() => _DateBarState();
+}
+
+class _DateBarState extends State<_DateBar> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _center() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) {
+        return;
+      }
+      final target = (_scrollController.position.maxScrollExtent / 2).clamp(
+        0.0,
+        _scrollController.position.maxScrollExtent,
+      );
+      _scrollController.animateTo(
+        target,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : AppMotion.fast,
+        curve: AppMotion.curve,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        final active = widget.controller.selectedDate;
+        final textScaler = MediaQuery.textScalerOf(context);
+        final chipHeight =
+            32 +
+            (textScaler.scale(10) * 1.3 * 2) +
+            (textScaler.scale(18) * 1.3);
+        final dates = List.generate(
+          15,
+          (index) => active.add(Duration(days: index - 7)),
+        );
+        _center();
+        return SizedBox(
+          height: chipHeight + 16,
+          child: ListView.separated(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(8),
+            itemCount: dates.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) => _DateChip(
+              date: dates[index],
+              selected: index == 7,
+              onTap: () => widget.controller.selectDate(dates[index]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DateChip extends StatelessWidget {
+  const _DateChip({
+    required this.date,
+    required this.selected,
     required this.onTap,
   });
 
-  final TodayHabit today;
-  final VoidCallback onToggle;
+  final DateTime date;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final completed = today.isComplete;
-
-    return AnimatedContainer(
-      duration: ProkopaAnimation.fast,
-      curve: ProkopaAnimation.curve,
-      decoration: BoxDecoration(
-        color: completed
-            ? ProkopaPalette.success.withValues(alpha: 0.08)
-            : Theme.of(context).colorScheme.surface,
-        borderRadius: ProkopaRadius.lgBorder,
-        border: Border.all(
-          color: completed
-              ? ProkopaPalette.success.withValues(alpha: 0.4)
-              : Theme.of(context).colorScheme.outlineVariant,
-          width: completed ? 1.5 : 1,
-        ),
-        boxShadow: completed
-            ? []
-            : [
-                BoxShadow(
-                  color: Theme.of(context).colorScheme.shadow
-                      .withValues(alpha: 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: ProkopaRadius.lgBorder,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: ProkopaRadius.lgBorder,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            child: Row(
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final isToday = date == today;
+    final isFuture = date.isAfter(today);
+    final theme = Theme.of(context);
+    final scaledWidth = MediaQuery.textScalerOf(context).scale(52);
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: !isFuture,
+      label: formatFullDate(date),
+      child: InkWell(
+        onTap: isFuture ? null : onTap,
+        borderRadius: AppRadius.mdBorder,
+        child: Ink(
+          width: scaledWidth < 52 ? 52 : scaledWidth,
+          padding: const EdgeInsetsDirectional.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.indigo600
+                : isToday
+                ? AppColors.indigo50
+                : theme.colorScheme.surface,
+            borderRadius: AppRadius.mdBorder,
+            border: Border.all(
+              color: selected
+                  ? AppColors.indigo600
+                  : isToday
+                  ? AppColors.indigo200
+                  : theme.colorScheme.outlineVariant,
+            ),
+          ),
+          child: ExcludeSemantics(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Semantics(
-                  button: true,
-                  label: today.habit.draft.title,
-                  value: completed ? 'Selesai' : 'Belum selesai',
-                  child: GestureDetector(
-                    onTap: onToggle,
-                    behavior: HitTestBehavior.opaque,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minWidth: 44,
-                        minHeight: 44,
-                      ),
-                      child: Center(
-                        child: ExcludeSemantics(
-                          child: AnimatedSwitcher(
-                            duration: ProkopaAnimation.fast,
-                            child: Icon(
-                              completed
-                                  ? Icons.check_circle_rounded
-                                  : Icons.circle_outlined,
-                              key: ValueKey(completed),
-                              size: 32,
-                              color: completed
-                                  ? ProkopaPalette.success
-                                  : Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                Text(
+                  _dayLabel(date.weekday),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 10,
+                    color: selected
+                        ? Colors.white
+                        : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(width: ProkopaSpacing.lg),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AnimatedDefaultTextStyle(
-                        duration: ProkopaAnimation.fast,
-                        style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                          color: completed
-                              ? Theme.of(context).colorScheme.onSurfaceVariant
-                              : Theme.of(context).colorScheme.onSurface,
-                          decoration: completed
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
-                        child: Text(today.habit.draft.title),
-                      ),
-                      if (today.isWeeklyTarget) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${today.completedThisWeek}/${today.weeklyTarget} minggu ini',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                        ),
-                      ],
-                      if (!today.isWeeklyTarget) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          _frequencyLabel(today.habit.draft.frequency),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                        ),
-                      ],
-                    ],
+                Text(
+                  '${date.day}',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontSize: 18,
+                    color: selected
+                        ? Colors.white
+                        : theme.colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  shortMonths[date.month - 1],
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 10,
+                    color: selected
+                        ? Colors.white
+                        : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -585,6 +595,154 @@ class _HabitCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _dayLabel(int weekday) =>
+      const ['SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB', 'MIN'][weekday - 1];
+}
+
+class _HabitCard extends StatelessWidget {
+  const _HabitCard({
+    super.key,
+    required this.today,
+    required this.progress,
+    required this.sortOrder,
+    required this.onToggle,
+    required this.onManage,
+  });
+
+  final TodayHabit today;
+  final HabitProgress? progress;
+  final double sortOrder;
+  final VoidCallback onToggle;
+  final VoidCallback onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = today.isComplete;
+    final accent = _habitColor(today.habit.draft.color);
+    final metadata = today.isWeeklyTarget
+        ? '${today.completedThisWeek}/${today.weeklyTarget} minggu ini'
+        : _frequencyLabel(today.habit.draft.frequency);
+    final streak = progress?.currentStreak ?? 0;
+    return Semantics(
+      button: true,
+      label: today.habit.draft.title,
+      value: completed ? 'Selesai' : 'Belum selesai',
+      hint: 'Ketuk untuk mengubah status. Tekan lama untuk mengelola.',
+      sortKey: OrdinalSortKey(sortOrder),
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : AppMotion.fast,
+        decoration: BoxDecoration(
+          color: completed
+              ? AppColors.emerald50
+              : Theme.of(context).colorScheme.surface,
+          borderRadius: AppRadius.lgBorder,
+          border: Border.all(
+            color: completed
+                ? AppColors.emerald100
+                : Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: AppRadius.lgBorder,
+          child: InkWell(
+            onTap: onToggle,
+            onLongPress: onManage,
+            borderRadius: AppRadius.lgBorder,
+            child: Padding(
+              padding: AppSpacing.cardPadding,
+              child: ExcludeSemantics(
+                child: Row(
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: const SizedBox(width: 4, height: 40),
+                    ),
+                    const SizedBox(width: 12),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: completed
+                            ? AppColors.emerald600
+                            : Colors.transparent,
+                        borderRadius: AppRadius.mdBorder,
+                        border: Border.all(
+                          color: completed
+                              ? AppColors.emerald600
+                              : Theme.of(context).colorScheme.outline,
+                          width: 2,
+                        ),
+                      ),
+                      child: SizedBox.square(
+                        dimension: 36,
+                        child: Icon(
+                          completed ? Icons.check : Icons.circle_outlined,
+                          size: 20,
+                          color: completed
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            today.habit.draft.title,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  decoration: completed
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            metadata,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (streak > 0) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.local_fire_department_outlined,
+                        size: 16,
+                        color: AppColors.amber700,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '$streak',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(color: AppColors.amber700),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _habitColor(String? value) {
+    if (value == null) {
+      return AppColors.indigo500;
+    }
+    final normalized = value.replaceFirst('#', '');
+    final parsed = int.tryParse(normalized, radix: 16);
+    return parsed == null ? AppColors.indigo500 : Color(0xFF000000 | parsed);
   }
 
   String _frequencyLabel(HabitFrequency frequency) => switch (frequency) {
@@ -594,103 +752,151 @@ class _HabitCard extends StatelessWidget {
   };
 }
 
-class _QuickHabitCreationSheet extends StatefulWidget {
-  const _QuickHabitCreationSheet({required this.store});
-  final HabitStore store;
+class _TodayProgress extends StatelessWidget {
+  const _TodayProgress({required this.progress});
 
-  @override
-  State<_QuickHabitCreationSheet> createState() =>
-      _QuickHabitCreationSheetState();
-}
-
-class _QuickHabitCreationSheetState extends State<_QuickHabitCreationSheet> {
-  final _title = TextEditingController();
-  var _saving = false;
-
-  @override
-  void dispose() {
-    _title.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final title = _title.text.trim();
-    if (title.isEmpty) return;
-
-    setState(() => _saving = true);
-    try {
-      await widget.store.create(
-        HabitDraft(
-          title: title,
-          frequency: HabitFrequency.daily,
-          startDate: DateTime.now(),
-        ),
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gagal menyimpan kebiasaan.')),
-        );
-      }
-    }
-  }
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          32,
-          24,
-          24 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Apa yang ingin kamu biasakan?',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: ProkopaSpacing.xl),
-            TextField(
-              controller: _title,
-              autofocus: true,
-              enabled: !_saving,
-              textCapitalization: TextCapitalization.sentences,
-              style: Theme.of(context).textTheme.titleLarge,
-              decoration: const InputDecoration(
-                hintText: 'Contoh: Bangun jam 5 pagi',
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                contentPadding: EdgeInsets.zero,
+    final percent = (progress * 100).round();
+    return BentoCard(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Progress Hari Ini',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
-              onSubmitted: (_) => _save(),
+              Text('$percent%', style: Theme.of(context).textTheme.titleMedium),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 8,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: progress),
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : AppMotion.progress,
+                curve: AppMotion.curve,
+                builder: (context, value, _) => LinearProgressIndicator(
+                  value: value,
+                  backgroundColor: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
+                  color: AppColors.emerald500,
+                ),
+              ),
             ),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: ProkopaSpacing.sm,
-              runSpacing: ProkopaSpacing.sm,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HabitsSleepCard extends StatelessWidget {
+  const _HabitsSleepCard({required this.record, required this.onTap});
+
+  final SleepRecord? record;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = record == null
+        ? 'Ketuk untuk mencatat tidur'
+        : '${record!.durationMinutes ~/ 60}j ${record!.durationMinutes % 60}m';
+    return Semantics(
+      button: true,
+      label: 'Sleep Tracker, $detail',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.lgBorder,
+        child: Ink(
+          padding: AppSpacing.cardPadding,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: Theme.of(context).brightness == Brightness.light
+                  ? const [AppColors.indigo50, AppColors.purple50]
+                  : const [Color(0xFF24214A), Color(0xFF34204F)],
+            ),
+            borderRadius: AppRadius.lgBorder,
+            border: Border.all(color: AppColors.purple200),
+          ),
+          child: ExcludeSemantics(
+            child: Row(
               children: [
-                TextButton(
-                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Batal'),
+                const Icon(
+                  Icons.bedtime_outlined,
+                  size: 24,
+                  color: AppColors.violet600,
                 ),
-                FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: Text(_saving ? 'Menyimpan...' : 'Tambah'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sleep Tracker',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        detail,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
+                const Icon(Icons.add, size: 20),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
+
+class _EmptyHabits extends StatelessWidget {
+  const _EmptyHabits({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return BentoCard(
+      child: Column(
+        children: [
+          const ExcludeSemantics(
+            child: Icon(Icons.track_changes_outlined, size: 40),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Belum ada kebiasaan',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tambahkan satu kebiasaan untuk mulai mencatat progress.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: onCreate,
+            child: const Text('Tambah kebiasaan'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _HabitAction { edit, pause, delete }

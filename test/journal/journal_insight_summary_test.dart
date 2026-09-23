@@ -67,12 +67,20 @@ void main() {
         ),
       ),
     );
+    await _pumpUntilFound(tester, find.text('Riwayat jurnal'));
+    await tester.tap(find.text('Riwayat jurnal'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
     final observation = find.textContaining('Membaca diselesaikan');
     await _pumpUntilFound(tester, observation);
+    await tester.pumpAndSettle();
 
     expect(find.text('Insight'), findsOneWidget);
     expect(find.text('Catatan uji'), findsOneWidget);
-    final dismissButton = find.byTooltip('Sembunyikan insight');
+    final dismissButton = find.byWidgetPredicate(
+      (widget) =>
+          widget is IconButton && widget.tooltip == 'Sembunyikan insight',
+    );
     expect(dismissButton, findsOneWidget);
     final dismissSize = tester.getSize(dismissButton);
     expect(dismissSize.width, greaterThanOrEqualTo(44));
@@ -83,7 +91,7 @@ void main() {
     );
 
     await tester.tap(dismissButton);
-    await _pumpUntilFound(tester, find.textContaining('Belum ada pola'));
+    await _pumpUntilGone(tester, observation);
     expect(observation, findsNothing);
   });
 }
@@ -99,4 +107,17 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
     }
   }
   fail('Widget tidak selesai dimuat.');
+}
+
+Future<void> _pumpUntilGone(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump();
+    if (finder.evaluate().isEmpty) {
+      return;
+    }
+  }
+  fail('Widget tidak selesai diperbarui.');
 }

@@ -197,25 +197,31 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
             const SizedBox(height: 16),
             Text('Frekuensi', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            SegmentedButton<HabitFrequency>(
-              segments: const [
-                ButtonSegment(
-                  value: HabitFrequency.daily,
-                  label: Text('Harian'),
-                ),
-                ButtonSegment(
-                  value: HabitFrequency.specificDays,
-                  label: Text('Hari tertentu'),
-                ),
-                ButtonSegment(
-                  value: HabitFrequency.weeklyTarget,
-                  label: Text('Target mingguan'),
-                ),
-              ],
-              selected: {_frequency},
-              onSelectionChanged: _saving
-                  ? null
-                  : (value) => setState(() => _frequency = value.single),
+            LayoutBuilder(
+              builder: (context, constraints) =>
+                  SegmentedButton<HabitFrequency>(
+                    direction: constraints.maxWidth < 480
+                        ? Axis.vertical
+                        : Axis.horizontal,
+                    segments: const [
+                      ButtonSegment(
+                        value: HabitFrequency.daily,
+                        label: Text('Harian'),
+                      ),
+                      ButtonSegment(
+                        value: HabitFrequency.specificDays,
+                        label: Text('Hari tertentu'),
+                      ),
+                      ButtonSegment(
+                        value: HabitFrequency.weeklyTarget,
+                        label: Text('Target mingguan'),
+                      ),
+                    ],
+                    selected: {_frequency},
+                    onSelectionChanged: _saving
+                        ? null
+                        : (value) => setState(() => _frequency = value.single),
+                  ),
             ),
             if (_frequency == HabitFrequency.specificDays) ...[
               const SizedBox(height: 16),
@@ -260,6 +266,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
             const SizedBox(height: 20),
             Text('Pengaturan', style: Theme.of(context).textTheme.titleMedium),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _category,
               decoration: const InputDecoration(labelText: 'Kategori'),
               items: _categories
@@ -273,6 +280,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
                   : (value) => setState(() => _category = value),
             ),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _icon,
               decoration: const InputDecoration(labelText: 'Ikon'),
               items: _icons
@@ -283,7 +291,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
                         children: [
                           Icon(icon.$2),
                           const SizedBox(width: 12),
-                          Text(icon.$1),
+                          Expanded(child: Text(icon.$1)),
                         ],
                       ),
                     ),
@@ -294,6 +302,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
                   : (value) => setState(() => _icon = value),
             ),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _color,
               decoration: const InputDecoration(labelText: 'Warna aksen'),
               items: _colors
@@ -304,7 +313,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
                         children: [
                           Icon(Icons.circle, color: color.$2),
                           const SizedBox(width: 12),
-                          Text(color.$1),
+                          Expanded(child: Text(color.$1)),
                         ],
                       ),
                     ),

@@ -5,54 +5,40 @@ import 'package:prokopa/src/app/app.dart';
 import 'package:prokopa/src/app/app_shell.dart';
 
 void main() {
-  const labels = ['Dashboard', 'Habits', 'Journal', 'Statistik', 'Profile'];
+  const labels = ['Dashboard', 'Habits', 'Journal', 'Stats'];
 
-  Finder title(String label) => find.descendant(
-    of: find.byType(IndexedStack),
-    matching: find.text(label),
-  );
+  Finder navigation(String label) => find.byKey(ValueKey('app-nav-$label'));
 
   testWidgets('application starts on Dashboard without feature data', (
     tester,
   ) async {
     await tester.pumpWidget(const ProkopaApp());
     expect(find.byType(AppShell), findsOneWidget);
-    expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      0,
-    );
+    final selected = tester
+        .widgetList<Semantics>(find.byType(Semantics))
+        .where((widget) => widget.properties.selected == true);
+    expect(selected, hasLength(1));
+    expect(selected.single.key, const ValueKey('app-nav-Dashboard'));
   });
 
-  testWidgets('exactly five labeled primary destinations are visible', (
+  testWidgets('exactly four labeled primary destinations are visible', (
     tester,
   ) async {
     await tester.pumpWidget(const ProkopaApp());
 
-    final destinations = tester.widgetList<NavigationDestination>(
-      find.byType(NavigationDestination),
-    );
-    expect(destinations.map((destination) => destination.label), labels);
     for (final label in labels) {
-      expect(
-        find.descendant(
-          of: find.byType(NavigationBar),
-          matching: find.text(label),
-        ),
-        findsOneWidget,
-      );
+      expect(navigation(label), findsOneWidget);
     }
     for (final label in [
-      'Today',
+      'Profile',
+      'Settings',
       'Insights',
       'Login',
       'Signup',
       'Account',
       'Sleep',
-      'Settings',
-      'Achievements',
-      'Notifications',
     ]) {
-      expect(find.text(label), findsNothing);
+      expect(navigation(label), findsNothing);
     }
   });
 
@@ -61,80 +47,65 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(const ProkopaApp());
-      await tester.tap(find.widgetWithText(NavigationDestination, label));
+      await tester.tap(navigation(label));
       await tester.pumpAndSettle();
-
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-        labels.indexOf(label),
+        tester.widget<Semantics>(navigation(label)).properties.selected,
+        isTrue,
       );
 
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Dashboard'));
+      await tester.tap(navigation('Dashboard'));
       await tester.pumpAndSettle();
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-        0,
+        tester.widget<Semantics>(navigation('Dashboard')).properties.selected,
+        isTrue,
       );
     });
   }
 
-  testWidgets(
-    'sequential and arbitrary tab changes retain destination elements',
-    (tester) async {
-      await tester.pumpWidget(const ProkopaApp());
-      final todayElement = tester.element(title('Dashboard'));
+  testWidgets('destination elements are retained after tab changes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const ProkopaApp());
+    final dashboardElement = tester.element(find.text('Dashboard').first);
 
-      for (final label in [
-        'Habits',
-        'Journal',
-        'Statistik',
-        'Profile',
-        'Dashboard',
-        'Habits',
-        'Journal',
-        'Profile',
-        'Statistik',
-        'Dashboard',
-        'Dashboard',
-      ]) {
-        await tester.tap(find.widgetWithText(NavigationDestination, label));
-        await tester.pumpAndSettle();
-        // Since we use an IndexedStack and the current layout relies on
-        // the icons mostly, we check if the label text exists in the bottom nav
-        // instead of checking IndexedStack descendant directly since it can be offstage.
-        expect(tester.takeException(), isNull);
-      }
-      expect(tester.element(title('Dashboard')), same(todayElement));
-    },
-  );
+    for (final label in [
+      'Habits',
+      'Journal',
+      'Stats',
+      'Dashboard',
+      'Journal',
+      'Dashboard',
+    ]) {
+      await tester.tap(navigation(label));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+    expect(
+      tester.element(find.text('Dashboard').first),
+      same(dashboardElement),
+    );
+  });
 
-  testWidgets(
-    'navigation exposes selected semantics and distinct icon states',
-    (tester) async {
-      final semantics = tester.ensureSemantics();
-      await tester.pumpWidget(const ProkopaApp());
+  testWidgets('navigation exposes selected semantics and tap targets', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(const ProkopaApp());
 
-      for (final label in labels) {
-        await tester.tap(find.widgetWithText(NavigationDestination, label));
-        await tester.pumpAndSettle();
-        final selectedTabs = tester
-            .widgetList<Semantics>(find.byType(Semantics))
-            .where((widget) => widget.properties.selected == true);
-        expect(selectedTabs, hasLength(1));
-        final destination = tester.widget<NavigationDestination>(
-          find.widgetWithText(NavigationDestination, label),
-        );
-        expect(
-          _navigationIcon(destination.icon),
-          isNot(_navigationIcon(destination.selectedIcon!)),
-        );
-        expect(find.bySemanticsLabel(RegExp(label)), findsWidgets);
-      }
-      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      semantics.dispose();
-    },
-  );
+    for (final label in labels) {
+      await tester.tap(navigation(label));
+      await tester.pumpAndSettle();
+      final selectedTabs = tester
+          .widgetList<Semantics>(find.byType(Semantics))
+          .where((widget) => widget.properties.selected == true);
+      expect(selectedTabs, hasLength(1));
+      expect(selectedTabs.single.key, ValueKey('app-nav-$label'));
+    }
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+    semantics.dispose();
+  });
 
   testWidgets('navigation works with keyboard focus and activation', (
     tester,
@@ -145,8 +116,8 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      1,
+      tester.widget<Semantics>(navigation('Habits')).properties.selected,
+      isTrue,
     );
   });
 
@@ -163,7 +134,7 @@ void main() {
         await tester.pumpWidget(const ProkopaApp());
 
         for (final label in labels) {
-          final control = find.widgetWithText(NavigationDestination, label);
+          final control = navigation(label);
           final size = tester.getSize(control);
           expect(size.width, greaterThanOrEqualTo(48));
           expect(size.height, greaterThanOrEqualTo(48));
@@ -189,23 +160,11 @@ void main() {
       Theme.of(tester.element(find.byType(AppShell))).brightness,
       Brightness.dark,
     );
-    expect(
-      tester
-          .widget<NavigationBar>(find.byType(NavigationBar))
-          .animationDuration,
-      Duration.zero,
-    );
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Profile'));
+    await tester.tap(navigation('Stats'));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      4,
+      tester.widget<Semantics>(navigation('Stats')).properties.selected,
+      isTrue,
     );
   });
 }
-
-IconData? _navigationIcon(Widget widget) => switch (widget) {
-  Icon(:final icon) => icon,
-  ExcludeSemantics(child: Icon(:final icon)) => icon,
-  _ => null,
-};

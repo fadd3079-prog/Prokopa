@@ -193,7 +193,7 @@ class _ProkopaAppState extends State<ProkopaApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final appearance = _profile?.appearance ?? AppAppearance.system;
     return MaterialApp(
-      title: 'Prokopa: Habits and Jurnaling',
+      title: 'Prokopa',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

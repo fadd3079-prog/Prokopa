@@ -128,7 +128,7 @@ class LocalNotificationService {
     timezone.setLocalLocation(timezone.getLocation(identifier));
     await _plugin.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('ic_notification'),
       ),
     );
     _initialized = true;

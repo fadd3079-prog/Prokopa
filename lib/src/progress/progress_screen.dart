@@ -1,10 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:prokopa/src/app/app_components.dart';
+import 'package:prokopa/src/app/app_date_controller.dart';
+import 'package:prokopa/src/app/app_theme.dart';
 import 'package:prokopa/src/core/date/local_date.dart';
 import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/progress/progress_store.dart';
+import 'package:prokopa/src/wellbeing/mood_record.dart';
 import 'package:prokopa/src/wellbeing/wellbeing_store.dart';
-import 'package:prokopa/src/app/app_theme.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({
@@ -12,267 +17,252 @@ class ProgressScreen extends StatefulWidget {
     required this.store,
     required this.wellbeingStore,
     this.habitStore,
+    this.dateController,
+    this.onSettings,
+    this.refreshVersion = 0,
   });
 
   final ProgressStore store;
   final WellbeingStore wellbeingStore;
   final HabitStore? habitStore;
+  final AppDateController? dateController;
+  final VoidCallback? onSettings;
+  final int refreshVersion;
 
   @override
   State<ProgressScreen> createState() => _ProgressScreenState();
 }
 
 class _ProgressScreenState extends State<ProgressScreen> {
+  late final AppDateController _dateController;
+  late final bool _ownsDateController;
   ProgressSnapshot? _month;
   List<HabitProgress> _habits = const [];
+  List<SleepRecord> _sleep = const [];
+  List<MoodRecord> _moods = const [];
   var _loading = true;
+  var _loadVersion = 0;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _ownsDateController = widget.dateController == null;
+    _dateController = widget.dateController ?? AppDateController();
+    _dateController.addListener(_reload);
     _reload();
   }
 
+  @override
+  void didUpdateWidget(covariant ProgressScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _reload();
+    }
+  }
+
+  @override
+  void dispose() {
+    _dateController.removeListener(_reload);
+    if (_ownsDateController) {
+      _dateController.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _reload() async {
+    final version = ++_loadVersion;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final now = DateTime.now();
-      final weekStart = now.subtract(
-        Duration(days: now.weekday - DateTime.monday),
-      );
-      final monthStart = DateTime(now.year, now.month);
-      final results = await Future.wait([
-        widget.store.snapshot(weekStart, now),
-        widget.store.snapshot(monthStart, now),
-        widget.wellbeingStore.listSleep(),
-        widget.wellbeingStore.averageSleepDuration(),
-        widget.wellbeingStore.averageSleepQuality(),
-        widget.wellbeingStore.sleepConsistency(),
-        if (widget.habitStore != null) widget.habitStore!.progress(),
+      final start = _dateController.displayedMonth;
+      final end = DateTime(start.year, start.month + 1, 0);
+      final results = await Future.wait<Object>([
+        widget.store.snapshot(start, end),
+        widget.wellbeingStore.listSleep(from: start, to: end),
+        widget.wellbeingStore.listMood(from: start, to: end),
+        if (widget.habitStore != null) widget.habitStore!.progress(now: end),
       ]);
-      if (mounted) {
-        setState(() {
-          _month = results[1] as ProgressSnapshot;
-          _habits = widget.habitStore == null
-              ? const []
-              : results[6] as List<HabitProgress>;
-          _loading = false;
-          _error = null;
-        });
+      if (!mounted || version != _loadVersion) {
+        return;
       }
+      setState(() {
+        _month = results[0] as ProgressSnapshot;
+        _sleep = results[1] as List<SleepRecord>;
+        _moods = results[2] as List<MoodRecord>;
+        _habits = widget.habitStore == null
+            ? const []
+            : (results[3] as List<HabitProgress>)
+                  .where((item) => item.habit.state == HabitState.active)
+                  .toList();
+        _loading = false;
+      });
     } catch (_) {
-      if (mounted) {
+      if (mounted && version == _loadVersion) {
         setState(() {
           _loading = false;
-          _error = 'Statistik belum dapat dimuat. Coba lagi.';
+          _error = 'Stats belum dapat dimuat. Coba lagi.';
         });
       }
     }
   }
 
-  Future<void> _review(String type) async {
+  Future<void> _review() async {
+    final start = _dateController.displayedMonth;
     final now = DateTime.now();
-    final start = type == 'weekly'
-        ? now.subtract(Duration(days: now.weekday - DateTime.monday))
-        : DateTime(now.year, now.month);
-    final record = await widget.store.saveReview(
-      type: type,
-      start: start,
-      end: now,
-    );
-    if (mounted) {
-      final changed = await showModalBottomSheet<bool>(
+    final monthEnd = DateTime(start.year, start.month + 1, 0);
+    final end = monthEnd.isAfter(now) ? now : monthEnd;
+    try {
+      final record = await widget.store.saveReview(
+        type: 'monthly',
+        start: start,
+        end: end,
+      );
+      if (!mounted) {
+        return;
+      }
+      await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (context) =>
-            _ReviewEditor(store: widget.store, record: record),
+        builder: (_) => _MonthlyReviewSummary(record: record),
       );
-      if (changed == true) {
-        await _reload();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tinjauan belum dapat dibuka.')),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const SafeArea(child: Center(child: CircularProgressIndicator()));
-    }
-    if (_error case final error?) {
-      return SafeArea(
-        child: Center(
-          child: Padding(
-            padding: ProkopaSpacing.cardPadding,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(error, textAlign: TextAlign.center),
-                const SizedBox(height: ProkopaSpacing.lg),
-                FilledButton(
-                  onPressed: () {
-                    setState(() => _loading = true);
-                    _reload();
-                  },
-                  child: const Text('Coba lagi'),
+    return Scaffold(
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 24, 16, 48),
+            children: [
+              AppPageHeader(
+                title: 'Stats',
+                subtitle:
+                    'Ringkasan kebiasaan untuk ${formatMonth(_dateController.displayedMonth)}',
+                onSettings: widget.onSettings ?? () {},
+              ),
+              const SizedBox(height: 24),
+              MonthNavigator(controller: _dateController, onChanged: _reload),
+              const SizedBox(height: 24),
+              if (_loading)
+                const SizedBox(
+                  height: 300,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      semanticsLabel: 'Memuat statistik',
+                    ),
+                  ),
+                )
+              else if (_error case final error?)
+                _StatsError(message: error, onRetry: _reload)
+              else ...[
+                _SummaryGrid(snapshot: _month!, habits: _habits, sleep: _sleep),
+                const SizedBox(height: 16),
+                _DailyCompletionChart(snapshot: _month!),
+                const SizedBox(height: 16),
+                _SleepChart(records: _sleep),
+                const SizedBox(height: 16),
+                _MoodCompletionChart(snapshot: _month!, records: _moods),
+                const SizedBox(height: 16),
+                _StatsHeatmap(snapshot: _month!),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: _review,
+                  child: const Text('Tinjauan bulan ini'),
                 ),
               ],
-            ),
+            ],
           ),
-        ),
-      );
-    }
-    return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: _reload,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: ProkopaSpacing.xxl),
-          children: [
-            Padding(
-              padding: ProkopaSpacing.screenPadding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      'Statistik',
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                  ),
-                  const SizedBox(height: ProkopaSpacing.xs),
-                  Text(
-                    'Ringkasan kebiasaan untuk ${_monthLabel(DateTime.now())}',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: ProkopaSpacing.xxl),
-            Padding(
-              padding: ProkopaSpacing.screenPadding,
-              child: _SummaryCard(
-                snapshot: _month!,
-                activeHabitCount: _habits.length,
-              ),
-            ),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            Padding(
-              padding: ProkopaSpacing.screenPadding,
-              child: Text(
-                'Aktivitas bulan ini',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            const SizedBox(height: ProkopaSpacing.lg),
-            _CalendarFullWidth(snapshot: _month!),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            Padding(
-              padding: ProkopaSpacing.screenPadding,
-              child: Text(
-                'Konsistensi Kebiasaan',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            const SizedBox(height: ProkopaSpacing.sm),
-            if (_habits.isEmpty)
-              const Padding(
-                padding: ProkopaSpacing.screenPadding,
-                child: Text('Belum ada kebiasaan yang dapat ditinjau.'),
-              )
-            else
-              for (final progress in _habits)
-                _HabitProgressRow(progress: progress),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            Padding(
-              padding: ProkopaSpacing.screenPadding,
-              child: OutlinedButton(
-                onPressed: () => _review('monthly'),
-                child: const Text('Tinjauan bulan ini'),
-              ),
-            ),
-          ],
         ),
       ),
     );
   }
-
-  String _monthLabel(DateTime date) {
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
-    ];
-    return '${months[date.month - 1]} ${date.year}';
-  }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.snapshot, required this.activeHabitCount});
+class _SummaryGrid extends StatelessWidget {
+  const _SummaryGrid({
+    required this.snapshot,
+    required this.habits,
+    required this.sleep,
+  });
 
   final ProgressSnapshot snapshot;
-  final int activeHabitCount;
+  final List<HabitProgress> habits;
+  final List<SleepRecord> sleep;
 
   @override
   Widget build(BuildContext context) {
     final completion = ((snapshot.completionRate ?? 0) * 100).round();
-    final activeDays = snapshot.calendar.values.where((state) {
-      return state == 'completed' || state == 'partial';
-    }).length;
+    final best = snapshot.dailyPlanned.entries.fold<(String, double)?>(null, (
+      current,
+      entry,
+    ) {
+      final rate = (snapshot.dailyCompleted[entry.key] ?? 0) / entry.value;
+      return current == null || rate > current.$2 ? (entry.key, rate) : current;
+    });
+    final activeDays = snapshot.dailyCompleted.values
+        .where((count) => count > 0)
+        .length;
+    final averageSleep = sleep.isEmpty
+        ? null
+        : sleep.fold<int>(0, (sum, item) => sum + item.durationMinutes) /
+              sleep.length /
+              60;
+    final items = [
+      ('$completion%', 'Rata-rata selesai', AppColors.indigo600),
+      (
+        best == null ? '–' : '${DateTime.parse(best.$1).day}',
+        best == null
+            ? 'Hari terbaik'
+            : 'Hari terbaik (${(best.$2 * 100).round()}%)',
+        AppColors.emerald700,
+      ),
+      ('$activeDays', 'Hari aktif', AppColors.amber700),
+      (
+        averageSleep == null ? '–' : '${averageSleep.toStringAsFixed(1)}j',
+        'Rata-rata tidur',
+        AppColors.violet600,
+      ),
+    ];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scaledBody = MediaQuery.textScalerOf(context).scale(14);
-        final useTwoColumns = constraints.maxWidth >= 340 && scaledBody <= 21;
-        final itemWidth = useTwoColumns
-            ? (constraints.maxWidth - ProkopaSpacing.md) / 2
-            : constraints.maxWidth;
+        final width = (constraints.maxWidth - 16) / 2;
         return Wrap(
-          spacing: ProkopaSpacing.md,
-          runSpacing: ProkopaSpacing.md,
+          spacing: 16,
+          runSpacing: 16,
           children: [
-            SizedBox(
-              width: itemWidth,
-              child: _MetricCard(
-                value: '$completion%',
-                label: 'Rata-rata selesai',
-                icon: Icons.donut_large,
+            for (final item in items)
+              SizedBox(
+                width: width,
+                child: BentoCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.$1,
+                        style: Theme.of(context).textTheme.headlineLarge
+                            ?.copyWith(fontSize: 30, color: item.$3),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.$2,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            SizedBox(
-              width: itemWidth,
-              child: _MetricCard(
-                value: '$activeDays',
-                label: 'Hari aktif',
-                icon: Icons.calendar_today_outlined,
-                color: ProkopaPalette.success,
-              ),
-            ),
-            SizedBox(
-              width: itemWidth,
-              child: _MetricCard(
-                value: '${snapshot.repetitions}',
-                label: 'Penyelesaian',
-                icon: Icons.check_circle_outline,
-              ),
-            ),
-            SizedBox(
-              width: itemWidth,
-              child: _MetricCard(
-                value: '$activeHabitCount',
-                label: 'Habit aktif',
-                icon: Icons.track_changes_outlined,
-              ),
-            ),
           ],
         );
       },
@@ -280,369 +270,445 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.value,
-    required this.label,
-    required this.icon,
-    this.color,
-  });
-
-  final String value;
-  final String label;
-  final IconData icon;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accent = color ?? theme.colorScheme.primary;
-    return Card(
-      child: Padding(
-        padding: ProkopaSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Semantics(
-              label: label,
-              image: true,
-              child: ExcludeSemantics(child: Icon(icon, color: accent)),
-            ),
-            const SizedBox(height: ProkopaSpacing.lg),
-            Text(
-              value,
-              style: theme.textTheme.headlineSmall?.copyWith(color: accent),
-            ),
-            const SizedBox(height: ProkopaSpacing.xs),
-            Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CalendarFullWidth extends StatelessWidget {
-  const _CalendarFullWidth({required this.snapshot});
+class _DailyCompletionChart extends StatelessWidget {
+  const _DailyCompletionChart({required this.snapshot});
 
   final ProgressSnapshot snapshot;
 
   @override
   Widget build(BuildContext context) {
-    final days = <DateTime>[];
-    var day = DateTime(
-      snapshot.start.year,
-      snapshot.start.month,
-      snapshot.start.day,
+    final days = snapshot.end.day;
+    final values = List<double>.generate(days, (index) {
+      final key = localDateKey(
+        DateTime(snapshot.start.year, snapshot.start.month, index + 1),
+      );
+      final planned = snapshot.dailyPlanned[key] ?? 0;
+      return planned == 0 ? 0 : (snapshot.dailyCompleted[key] ?? 0) / planned;
+    });
+    return _ChartCard(
+      title: 'Tingkat Penyelesaian Harian',
+      empty: snapshot.dailyPlanned.isEmpty,
+      emptyText: 'Belum ada aktivitas untuk digambar pada bulan ini.',
+      semanticsLabel: 'Grafik tingkat penyelesaian harian',
+      painter: _LineChartPainter(
+        values: values,
+        lineColor: AppColors.indigo500,
+        fillColor: AppColors.indigo100,
+      ),
     );
-    while (!day.isAfter(snapshot.end)) {
-      days.add(day);
-      day = day.add(const Duration(days: 1));
+  }
+}
+
+class _SleepChart extends StatelessWidget {
+  const _SleepChart({required this.records});
+
+  final List<SleepRecord> records;
+
+  @override
+  Widget build(BuildContext context) {
+    final ordered = [...records]..sort((a, b) => a.end.compareTo(b.end));
+    final values = ordered.map((item) => item.durationMinutes / 60).toList();
+    return _ChartCard(
+      title: 'Durasi Tidur',
+      empty: values.isEmpty,
+      emptyText: 'Belum ada catatan tidur pada bulan ini.',
+      semanticsLabel: 'Grafik durasi tidur dalam jam',
+      painter: _LineChartPainter(
+        values: values,
+        lineColor: AppColors.purple500,
+        fillColor: AppColors.purple200,
+      ),
+    );
+  }
+}
+
+class _MoodCompletionChart extends StatelessWidget {
+  const _MoodCompletionChart({required this.snapshot, required this.records});
+
+  final ProgressSnapshot snapshot;
+  final List<MoodRecord> records;
+
+  @override
+  Widget build(BuildContext context) {
+    final values = <double>[];
+    for (final valence in MoodValence.values) {
+      final dates = records
+          .where((item) => item.valence == valence)
+          .map((item) => localDateKey(item.recordedAt))
+          .toSet();
+      final rates = dates.map((date) {
+        final planned = snapshot.dailyPlanned[date] ?? 0;
+        return planned == 0
+            ? 0.0
+            : (snapshot.dailyCompleted[date] ?? 0) / planned;
+      }).toList();
+      values.add(
+        rates.isEmpty ? 0 : rates.reduce((a, b) => a + b) / rates.length,
+      );
     }
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final availableWidth = screenWidth - 40;
-    final cellSize = (availableWidth - (6 * 8)) / 7;
-
-    return Padding(
-      padding: ProkopaSpacing.screenPadding,
+    return BentoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              _WeekdayLabel('Sen'),
-              _WeekdayLabel('Sel'),
-              _WeekdayLabel('Rab'),
-              _WeekdayLabel('Kam'),
-              _WeekdayLabel('Jum'),
-              _WeekdayLabel('Sab'),
-              _WeekdayLabel('Min'),
-            ],
+          Text(
+            'Mood dan Penyelesaian',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: ProkopaSpacing.sm),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (int i = 0; i < (snapshot.start.weekday - 1); i++)
-                SizedBox(width: cellSize, height: cellSize),
-              for (final day in days)
-                Semantics(
-                  label:
-                      '${localDateKey(day)} ${_label(snapshot.calendar[localDateKey(day)])}',
-                  child: Container(
-                    width: cellSize,
-                    height: cellSize,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: ProkopaRadius.mdBorder,
-                      border: Border.all(
-                        color: _borderColor(
-                          context,
-                          snapshot.calendar[localDateKey(day)],
-                        ),
-                        width: 1.5,
-                      ),
-                      color: _color(
-                        context,
-                        snapshot.calendar[localDateKey(day)],
-                      ),
-                    ),
-                    child: Text(
-                      '${day.day}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _textColor(
-                          context,
-                          snapshot.calendar[localDateKey(day)],
-                        ),
-                      ),
+          const SizedBox(height: 4),
+          Text(
+            'Rata-rata penyelesaian berdasarkan mood yang dicatat.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 20),
+          if (records.isEmpty)
+            Text(
+              'Belum ada mood yang tercatat pada bulan ini.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            Semantics(
+              label: 'Grafik batang mood dan tingkat penyelesaian',
+              child: ExcludeSemantics(
+                child: SizedBox(
+                  height: 190,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _BarChartPainter(
+                      values: values,
+                      color: AppColors.emerald500,
+                      gridColor: Theme.of(context).colorScheme.outlineVariant,
                     ),
                   ),
                 ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Sangat buruk'),
+              Text('Netral'),
+              Text('Sangat baik'),
             ],
           ),
         ],
       ),
     );
   }
-
-  String _label(String? state) => switch (state) {
-    'completed' => 'Selesai',
-    'partial' => 'Sebagian',
-    'skipped' => 'Dilewati',
-    'missed' => 'Terlewat',
-    _ => 'Tanpa rencana',
-  };
-
-  Color _color(BuildContext context, String? state) => switch (state) {
-    'completed' => ProkopaPalette.success,
-    'partial' => ProkopaPalette.momentum,
-    'skipped' => Theme.of(context).colorScheme.surfaceContainerHighest,
-    'missed' => Colors.transparent,
-    _ => Theme.of(context).colorScheme.surface,
-  };
-
-  Color _borderColor(BuildContext context, String? state) => switch (state) {
-    'completed' => ProkopaPalette.success,
-    'partial' => ProkopaPalette.momentum,
-    'skipped' => Theme.of(context).colorScheme.surfaceContainerHighest,
-    'missed' => Theme.of(context).colorScheme.outlineVariant,
-    _ => Theme.of(context).colorScheme.surfaceContainerHighest,
-  };
-
-  Color _textColor(BuildContext context, String? state) => switch (state) {
-    'completed' => Colors.white,
-    'partial' => ProkopaPalette.textPrimary,
-    'skipped' => Theme.of(context).colorScheme.onSurfaceVariant,
-    'missed' => Theme.of(context).colorScheme.onSurfaceVariant,
-    _ => Theme.of(context).colorScheme.onSurface,
-  };
 }
 
-class _WeekdayLabel extends StatelessWidget {
-  const _WeekdayLabel(this.label);
-  final String label;
+class _ChartCard extends StatelessWidget {
+  const _ChartCard({
+    required this.title,
+    required this.empty,
+    required this.emptyText,
+    required this.semanticsLabel,
+    required this.painter,
+  });
+
+  final String title;
+  final bool empty;
+  final String emptyText;
+  final String semanticsLabel;
+  final CustomPainter painter;
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final availableWidth = screenWidth - 40;
-    final cellSize = (availableWidth - (6 * 8)) / 7;
-
-    return SizedBox(
-      width: cellSize,
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.labelMedium
-            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    return BentoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 20),
+          if (empty)
+            Text(emptyText, style: Theme.of(context).textTheme.bodySmall)
+          else
+            Semantics(
+              label: semanticsLabel,
+              child: ExcludeSemantics(
+                child: SizedBox(
+                  height: 220,
+                  width: double.infinity,
+                  child: CustomPaint(painter: painter),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _HabitProgressRow extends StatelessWidget {
-  const _HabitProgressRow({required this.progress});
+class _LineChartPainter extends CustomPainter {
+  _LineChartPainter({
+    required this.values,
+    required this.lineColor,
+    required this.fillColor,
+  });
 
-  final HabitProgress progress;
+  final List<double> values;
+  final Color lineColor;
+  final Color fillColor;
 
   @override
-  Widget build(BuildContext context) {
-    final detail = progress.isWeeklyTarget
-        ? '${progress.weekCompleted}/${progress.weekTarget} minggu ini · ${progress.repetitions} repetisi · ${progress.currentStreak} minggu beruntun'
-        : '${progress.repetitions} repetisi · streak ${progress.currentStreak} · terpanjang ${progress.longestStreak}';
-    return ListTile(
-      contentPadding: ProkopaSpacing.screenPadding,
-      title: Text(
-        progress.habit.draft.title,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      subtitle: Text(
-        progress.recoveryCount == 0
-            ? detail
-            : '$detail · ${progress.recoveryCount} kali kembali',
-        style: Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-      ),
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = AppColors.border
+      ..strokeWidth = 1;
+    for (var index = 0; index <= 4; index++) {
+      final y = size.height * index / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+    if (values.isEmpty) {
+      return;
+    }
+    final maxValue = math.max(1.0, values.fold<double>(0, math.max));
+    final path = Path();
+    for (var index = 0; index < values.length; index++) {
+      final x = values.length == 1
+          ? 0.0
+          : size.width * index / (values.length - 1);
+      final y = size.height - size.height * values[index] / maxValue;
+      if (index == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    final fill = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(fill, Paint()..color = fillColor.withValues(alpha: 0.45));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = lineColor
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
     );
   }
+
+  @override
+  bool shouldRepaint(covariant _LineChartPainter oldDelegate) =>
+      oldDelegate.values != values ||
+      oldDelegate.lineColor != lineColor ||
+      oldDelegate.fillColor != fillColor;
 }
 
-class _ReviewEditor extends StatefulWidget {
-  const _ReviewEditor({required this.store, required this.record});
+class _BarChartPainter extends CustomPainter {
+  _BarChartPainter({
+    required this.values,
+    required this.color,
+    required this.gridColor,
+  });
 
-  final ProgressStore store;
-  final ReviewRecord record;
-
-  @override
-  State<_ReviewEditor> createState() => _ReviewEditorState();
-}
-
-class _ReviewEditorState extends State<_ReviewEditor> {
-  late final TextEditingController _reflection;
-  String? _adjustment;
-  var _saving = false;
-  String? _error;
+  final List<double> values;
+  final Color color;
+  final Color gridColor;
 
   @override
-  void initState() {
-    super.initState();
-    _reflection = TextEditingController(text: widget.record.reflection ?? '');
-    _adjustment = widget.record.data['adjustment'] as String?;
-  }
-
-  @override
-  void dispose() {
-    _reflection.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await widget.store.saveReview(
-        type: widget.record.type,
-        start: widget.record.start,
-        end: widget.record.end,
-        reflection: _reflection.text,
-        adjustment: _adjustment,
+  void paint(Canvas canvas, Size size) {
+    final grid = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+    for (var index = 0; index <= 4; index++) {
+      final y = size.height * index / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+    final slot = size.width / values.length;
+    final width = math.min(36.0, slot * 0.55);
+    for (var index = 0; index < values.length; index++) {
+      final height = size.height * values[index].clamp(0, 1);
+      final left = slot * index + (slot - width) / 2;
+      final rect = RRect.fromRectAndCorners(
+        Rect.fromLTWH(left, size.height - height, width, height),
+        topLeft: const Radius.circular(8),
+        topRight: const Radius.circular(8),
       );
-      if (mounted) {
-        Navigator.of(context).pop(true);
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _error = 'Tinjauan belum tersimpan. Coba lagi.';
-        });
-      }
+      canvas.drawRRect(rect, Paint()..color = color);
     }
   }
 
   @override
+  bool shouldRepaint(covariant _BarChartPainter oldDelegate) =>
+      oldDelegate.values != values || oldDelegate.color != color;
+}
+
+class _StatsHeatmap extends StatelessWidget {
+  const _StatsHeatmap({required this.snapshot});
+
+  final ProgressSnapshot snapshot;
+
+  @override
   Widget build(BuildContext context) {
-    final data = widget.record.data;
+    final start = DateTime(snapshot.start.year, snapshot.start.month);
+    final end = DateTime(start.year, start.month + 1, 0);
+    final leading = start.weekday - 1;
+    final total = leading + end.day;
+    final trailing = (7 - total % 7) % 7;
+    return BentoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Heatmap Aktivitas · ${formatMonth(start)}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 6.0;
+              final size = (constraints.maxWidth - gap * 6) / 7;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (var index = 0; index < total + trailing; index++)
+                    if (index < leading || index >= leading + end.day)
+                      SizedBox.square(dimension: size)
+                    else
+                      _StatsHeatmapCell(
+                        date: DateTime(
+                          start.year,
+                          start.month,
+                          index - leading + 1,
+                        ),
+                        count:
+                            snapshot.dailyCompleted[localDateKey(
+                              DateTime(
+                                start.year,
+                                start.month,
+                                index - leading + 1,
+                              ),
+                            )] ??
+                            0,
+                        max: math.max(
+                          1,
+                          snapshot.dailyCompleted.values.fold<int>(0, math.max),
+                        ),
+                        size: size,
+                      ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsHeatmapCell extends StatelessWidget {
+  const _StatsHeatmapCell({
+    required this.date,
+    required this.count,
+    required this.max,
+    required this.size,
+  });
+
+  final DateTime date;
+  final int count;
+  final int max;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = count / max;
+    final color = count == 0
+        ? Theme.of(context).colorScheme.surfaceContainer
+        : ratio <= 0.25
+        ? AppColors.emerald200
+        : ratio <= 0.5
+        ? AppColors.emerald300
+        : ratio <= 0.75
+        ? AppColors.emerald400
+        : AppColors.emerald500;
+    return Semantics(
+      label: '${date.day} ${fullMonths[date.month - 1]}, $count selesai',
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: AppRadius.smBorder,
+          ),
+          child: SizedBox.square(
+            dimension: size,
+            child: Center(
+              child: Text(
+                '${date.day}',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(fontSize: 10),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthlyReviewSummary extends StatelessWidget {
+  const _MonthlyReviewSummary({required this.record});
+
+  final ReviewRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = record.data;
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          32,
-          24,
-          24 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
+        padding: const EdgeInsetsDirectional.fromSTEB(20, 8, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.record.type == 'weekly'
-                  ? 'Tinjauan minggu ini'
-                  : 'Tinjauan bulan ini',
+              'Tinjauan Bulanan',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: ProkopaSpacing.xl),
+            const SizedBox(height: 16),
             Text(
-              '${data['completed']} selesai dari ${data['planned']} terjadwal.',
+              '${data['completed']} selesai dari ${data['planned']} aktivitas terjadwal.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-            const SizedBox(height: ProkopaSpacing.md),
-            TextField(
-              controller: _reflection,
-              enabled: !_saving,
-              minLines: 3,
-              maxLines: 5,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                hintText:
-                    'Apa yang membantu, sulit, atau ingin kamu sesuaikan?',
-                filled: true,
-              ),
+            const SizedBox(height: 8),
+            Text(
+              '${data['journalCount']} catatan jurnal · ${data['sleepCount']} catatan tidur',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-            const SizedBox(height: ProkopaSpacing.lg),
-            DropdownButtonFormField<String?>(
-              initialValue: _adjustment,
-              decoration: const InputDecoration(
-                labelText: 'Langkah berikutnya',
+            const SizedBox(height: 20),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Tutup'),
               ),
-              items: const [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Belum dipilih'),
-                ),
-                DropdownMenuItem(
-                  value: 'keep',
-                  child: Text('Pertahankan yang membantu'),
-                ),
-                DropdownMenuItem(
-                  value: 'change_schedule',
-                  child: Text('Ubah jadwal kebiasaan'),
-                ),
-                DropdownMenuItem(
-                  value: 'reduce_target',
-                  child: Text('Kurangi target kebiasaan'),
-                ),
-              ],
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _adjustment = value),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            const SizedBox(height: ProkopaSpacing.xxxl),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Batal'),
-                ),
-                const SizedBox(width: ProkopaSpacing.sm),
-                FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: Text(_saving ? 'Menyimpan' : 'Simpan tinjauan'),
-                ),
-              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _StatsError extends StatelessWidget {
+  const _StatsError({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return BentoCard(
+      child: Column(
+        children: [
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          FilledButton(onPressed: onRetry, child: const Text('Coba lagi')),
+        ],
       ),
     );
   }

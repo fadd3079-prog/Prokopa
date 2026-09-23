@@ -13,6 +13,8 @@ class ProgressSnapshot {
     required this.missed,
     required this.repetitions,
     required this.calendar,
+    this.dailyCompleted = const {},
+    this.dailyPlanned = const {},
   });
 
   final DateTime start;
@@ -22,6 +24,8 @@ class ProgressSnapshot {
   final int missed;
   final int repetitions;
   final Map<String, String> calendar;
+  final Map<String, int> dailyCompleted;
+  final Map<String, int> dailyPlanned;
 
   int get planned => completed + skipped + missed;
 
@@ -65,6 +69,8 @@ class ProgressStore {
     var skipped = 0;
     var missed = 0;
     final calendar = <String, String>{};
+    final dailyCompleted = <String, int>{};
+    final dailyPlanned = <String, int>{};
     for (final row in rows) {
       final state = row['state']! as String;
       switch (state) {
@@ -76,6 +82,10 @@ class ProgressStore {
           missed++;
       }
       final key = row['planned_date']! as String;
+      dailyPlanned.update(key, (value) => value + 1, ifAbsent: () => 1);
+      if (state == 'completed') {
+        dailyCompleted.update(key, (value) => value + 1, ifAbsent: () => 1);
+      }
       final existing = calendar[key];
       calendar[key] = _combinedCalendarState(existing, state);
     }
@@ -87,6 +97,8 @@ class ProgressStore {
       missed: missed,
       repetitions: completed,
       calendar: calendar,
+      dailyCompleted: dailyCompleted,
+      dailyPlanned: dailyPlanned,
     );
   }
 

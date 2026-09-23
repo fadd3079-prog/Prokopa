@@ -30,21 +30,20 @@ void main() {
     await _pumpUntilFound(tester, find.text('Habits'));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byTooltip('Buat kebiasaan'));
+    await tester.tap(find.byTooltip('Tambah kebiasaan'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Apa yang ingin kamu biasakan?'), findsOneWidget);
+    expect(find.text('Buat kebiasaan'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.drag(
-      find.byType(SingleChildScrollView),
-      const Offset(0, -600),
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final manageHabits = find.text('Kelola semua kebiasaan');
+    await tester.scrollUntilVisible(
+      manageHabits,
+      200,
+      scrollable: find.byType(Scrollable).first,
     );
-    await tester.pump();
-    await tester.tap(find.text('Batal'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-
-    await tester.tap(find.byTooltip('Kelola habits'));
+    await tester.tap(manageHabits);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Kelola kebiasaan'), findsOneWidget);
@@ -66,17 +65,15 @@ void main() {
         ),
       ),
     );
-    await _pumpUntilFound(tester, find.text('Insight'));
+    await _pumpUntilFound(tester, find.text('Bagaimana perasaan Anda?'));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byTooltip('Buat catatan'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Catatan bebas'), findsOneWidget);
-    expect(find.text('Refleksi terpandu'), findsOneWidget);
-    await tester.tap(find.text('Catatan bebas'));
-    await tester.pump();
-    await _pumpUntilFound(tester, find.text('Catatan'));
+    await tester.scrollUntilVisible(
+      find.text('Catatan Hari Ini'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Catatan Hari Ini'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -95,7 +92,7 @@ void main() {
         ),
       ),
     );
-    await _pumpUntilFound(tester, find.text('Statistik'));
+    await _pumpUntilFound(tester, find.text('Stats'));
     expect(tester.takeException(), isNull);
   });
 
@@ -107,7 +104,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
-        home: ProfileScreen(
+        home: SettingsScreen(
           profile: LocalProfile(
             id: 'local-profile',
             name: 'Rani',
@@ -121,7 +118,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -49,14 +49,14 @@ void main() {
         home: DashboardScreen(store: setup.store),
       ),
     );
-    await _pumpUntilFound(tester, find.text('1 dari 1 selesai hari ini'));
+    await _pumpUntilFound(tester, find.text('1 dari 1 kebiasaan'));
 
     expect(find.text('Dashboard'), findsOneWidget);
-    expect(find.text('Penyelesaian hari ini'), findsOneWidget);
-    expect(find.text('Ringkasan'), findsOneWidget);
-    expect(find.text('Streak kebiasaan'), findsOneWidget);
+    expect(find.text('OVERVIEW'), findsOneWidget);
+    expect(find.text('STREAK TERBAIK'), findsOneWidget);
+    expect(find.text('Kebiasaan Hari Ini'), findsOneWidget);
     expect(find.text('Membaca'), findsNWidgets(2));
-    expect(find.text('2 hari'), findsNWidgets(2));
+    expect(find.text('2 hari'), findsOneWidget);
 
     tester.view.physicalSize = const Size(320, 640);
     tester.platformDispatcher.textScaleFactorTestValue = 2;
@@ -67,7 +67,7 @@ void main() {
         home: DashboardScreen(store: setup.store),
       ),
     );
-    await _pumpUntilFound(tester, find.text('Penyelesaian hari ini'));
+    await _pumpUntilFound(tester, find.text('1 dari 1 kebiasaan'));
     expect(tester.takeException(), isNull);
   });
 }
