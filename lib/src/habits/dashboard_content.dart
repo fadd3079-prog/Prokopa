@@ -648,13 +648,15 @@ class _DashboardHabitRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final complete = today.isComplete;
     return Semantics(
-      button: true,
+      button: !complete || !today.isWeeklyTarget,
       label: today.habit.draft.title,
       value: complete ? 'Selesai' : 'Belum selesai',
-      hint: 'Ketuk untuk mengubah status. Tekan lama untuk mengelola.',
+      hint: complete && today.isWeeklyTarget
+          ? 'Target minggu ini tercapai. Tekan lama untuk mengelola.'
+          : 'Ketuk untuk mengubah status. Tekan lama untuk mengelola.',
       sortKey: OrdinalSortKey(sortOrder),
       child: InkWell(
-        onTap: onTap,
+        onTap: complete && today.isWeeklyTarget ? null : onTap,
         onLongPress: onLongPress,
         borderRadius: AppRadius.mdBorder,
         child: Ink(

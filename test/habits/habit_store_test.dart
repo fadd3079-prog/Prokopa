@@ -58,10 +58,13 @@ void main() {
       expect(isHabitScheduledOn(habit.draft, DateTime(2026, 9, 7)), isFalse);
       await result.store.complete(habit, date: DateTime(2026, 9, 7));
       await result.store.complete(habit, date: DateTime(2026, 9, 8));
+      await result.store.complete(habit, date: DateTime(2026, 9, 9));
       final today = await result.store.loadToday(now: DateTime(2026, 9, 9));
 
-      expect(today.single.completedThisWeek, 2);
+      expect(today, hasLength(1));
+      expect(today.single.completedThisWeek, 3);
       expect(today.single.weeklyTarget, 3);
+      expect(today.single.isComplete, isTrue);
     },
   );
 
@@ -77,12 +80,33 @@ void main() {
     expect(history.single.state, HabitExecutionState.completed);
   });
 
+  test('completion records action time separately from planned date', () async {
+    final result = await openStore();
+    final habit = await result.store.create(draft());
+    final actionTime = DateTime(2026, 9, 24, 10, 30);
+
+    await result.store.complete(
+      habit,
+      date: DateTime(2026, 9, 9),
+      now: actionTime,
+    );
+
+    final execution = (await result.store.history(habit)).single;
+    expect(execution.plannedDate, DateTime(2026, 9, 9));
+    expect(execution.recordedAt, actionTime.toUtc());
+  });
+
   test('skip remains distinct from completion', () async {
     final result = await openStore();
     final habit = await result.store.create(draft());
+    final plannedDate = DateTime(2026, 9, 9);
 
-    await result.store.skip(habit, reason: 'rest', date: DateTime(2026, 9, 9));
+    await result.store.skip(habit, reason: 'rest', date: plannedDate);
 
+    await expectLater(
+      result.store.complete(habit, date: plannedDate),
+      throwsStateError,
+    );
     final history = await result.store.history(habit);
     expect(history.single.state, HabitExecutionState.skipped);
     expect(history.single.skipReason, 'rest');
@@ -170,19 +194,22 @@ void main() {
     );
   });
 
-  test('archived habit can be restored without losing execution history', () async {
-    final result = await openStore();
-    final habit = await result.store.create(draft());
-    await result.store.complete(habit, date: DateTime(2026, 9, 9));
-    await result.store.archive(habit, now: DateTime(2026, 9, 9));
+  test(
+    'archived habit can be restored without losing execution history',
+    () async {
+      final result = await openStore();
+      final habit = await result.store.create(draft());
+      await result.store.complete(habit, date: DateTime(2026, 9, 9));
+      await result.store.archive(habit, now: DateTime(2026, 9, 9));
 
-    final archived = (await result.store.list(includeArchived: true)).single;
-    await result.store.restore(archived);
+      final archived = (await result.store.list(includeArchived: true)).single;
+      await result.store.restore(archived);
 
-    final restored = (await result.store.list()).single;
-    expect(restored.state, HabitState.active);
-    expect(await result.store.history(restored), hasLength(1));
-  });
+      final restored = (await result.store.list()).single;
+      expect(restored.state, HabitState.active);
+      expect(await result.store.history(restored), hasLength(1));
+    },
+  );
 
   test(
     'future configuration updates retain historical execution snapshots',

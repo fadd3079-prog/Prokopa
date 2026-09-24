@@ -76,7 +76,7 @@ class HabitStore {
           .length;
       if (effectiveHabit.draft.frequency == HabitFrequency.weeklyTarget) {
         final target = await _weeklyTargetForPeriod(effectiveHabit, day);
-        if (target > 0 && completed < target) {
+        if (target > 0) {
           result.add(
             TodayHabit(
               habit: effectiveHabit,
@@ -111,8 +111,9 @@ class HabitStore {
     return result;
   }
 
-  Future<void> complete(Habit habit, {DateTime? date}) async {
-    final day = date ?? DateTime.now();
+  Future<void> complete(Habit habit, {DateTime? date, DateTime? now}) async {
+    final actionTime = now ?? DateTime.now();
+    final day = date ?? actionTime;
     _ensureNotFuture(day);
     final effectiveHabit = habit.withDraft(await _draftForDate(habit, day));
     if (!await _canRecord(effectiveHabit, day)) {
@@ -129,10 +130,11 @@ class HabitStore {
       if (rows.singleOrNull?['state'] == HabitExecutionState.completed.value) {
         return;
       }
-      if (rows.singleOrNull?['state'] == HabitExecutionState.missed.value) {
-        throw StateError('A missed execution cannot be completed implicitly.');
+      if (rows.singleOrNull?['state'] case final state?
+          when state != HabitExecutionState.completed.value) {
+        throw StateError('$state execution cannot be completed implicitly.');
       }
-      final now = utcTimestamp(day);
+      final timestamp = utcTimestamp(actionTime);
       final values = {
         'habit_id': effectiveHabit.id,
         'planned_date': key,
@@ -142,8 +144,8 @@ class HabitStore {
         'configuration_snapshot': jsonEncode(
           _configuration(effectiveHabit.draft),
         ),
-        'recorded_at': now,
-        'updated_at': now,
+        'recorded_at': timestamp,
+        'updated_at': timestamp,
       };
       if (rows.isEmpty) {
         await transaction.insert('habit_executions', {
@@ -184,7 +186,7 @@ class HabitStore {
             'habit_id': habit.id,
             'action': HabitRecoveryAction.continueHabit.value,
             'missed_planned_date': interruption.single['planned_date'],
-            'recorded_at': now,
+            'recorded_at': timestamp,
           });
         }
       }

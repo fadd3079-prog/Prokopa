@@ -163,6 +163,14 @@ class _TodayScreenState extends State<TodayScreen> {
               title: const Text('Edit'),
               onTap: () => Navigator.of(context).pop(_HabitAction.edit),
             ),
+            if (habit.draft.frequency != HabitFrequency.weeklyTarget)
+              ListTile(
+                leading: const ExcludeSemantics(
+                  child: Icon(Icons.skip_next_outlined),
+                ),
+                title: const Text('Lewati hari ini'),
+                onTap: () => Navigator.of(context).pop(_HabitAction.skip),
+              ),
             ListTile(
               leading: const ExcludeSemantics(
                 child: Icon(Icons.pause_outlined),
@@ -202,6 +210,9 @@ class _TodayScreenState extends State<TodayScreen> {
         if (changed == true) {
           await _reload();
         }
+      case _HabitAction.skip:
+        await widget.store.skip(habit, date: _dateController.selectedDate);
+        await _reload();
       case _HabitAction.pause:
         await widget.store.pause(habit);
         await widget.reminderService?.cancel(habit);
@@ -626,10 +637,12 @@ class _HabitCard extends StatelessWidget {
         : _frequencyLabel(today.habit.draft.frequency);
     final streak = progress?.currentStreak ?? 0;
     return Semantics(
-      button: true,
+      button: !completed || !today.isWeeklyTarget,
       label: today.habit.draft.title,
       value: completed ? 'Selesai' : 'Belum selesai',
-      hint: 'Ketuk untuk mengubah status. Tekan lama untuk mengelola.',
+      hint: completed && today.isWeeklyTarget
+          ? 'Target minggu ini tercapai. Tekan lama untuk mengelola.'
+          : 'Ketuk untuk mengubah status. Tekan lama untuk mengelola.',
       sortKey: OrdinalSortKey(sortOrder),
       child: AnimatedContainer(
         duration: MediaQuery.disableAnimationsOf(context)
@@ -650,7 +663,7 @@ class _HabitCard extends StatelessWidget {
           color: Colors.transparent,
           borderRadius: AppRadius.lgBorder,
           child: InkWell(
-            onTap: onToggle,
+            onTap: completed && today.isWeeklyTarget ? null : onToggle,
             onLongPress: onManage,
             borderRadius: AppRadius.lgBorder,
             child: Padding(
@@ -899,4 +912,4 @@ class _EmptyHabits extends StatelessWidget {
   }
 }
 
-enum _HabitAction { edit, pause, delete }
+enum _HabitAction { edit, skip, pause, delete }

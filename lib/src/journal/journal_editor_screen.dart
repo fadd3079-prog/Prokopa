@@ -32,6 +32,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
   String? _mood;
   Timer? _autosave;
   Future<void>? _currentSave;
+  JournalEntry? _pendingSave;
   var _revision = 0;
   var _saving = false;
   var _saved = false;
@@ -55,7 +56,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
   void dispose() {
     _disposing = true;
     _autosave?.cancel();
-    unawaited(_saveDraft());
+    final pending = _updated(status: JournalEntryStatus.draft);
+    unawaited(_saveDraft(pending: pending));
     _title.dispose();
     _body.dispose();
     _tags.dispose();
@@ -103,13 +105,14 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     );
   }
 
-  Future<void> _saveDraft() async {
+  Future<void> _saveDraft({JournalEntry? pending}) async {
     final current = _currentSave;
     if (current != null) {
+      _pendingSave = pending ?? _updated(status: JournalEntryStatus.draft);
       return current;
     }
     final revision = _revision;
-    final updated = _updated(status: JournalEntryStatus.draft);
+    final updated = pending ?? _updated(status: JournalEntryStatus.draft);
     _currentSave = _persistDraft(updated, revision);
     return _currentSave!;
   }
@@ -152,8 +155,10 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     } finally {
       _currentSave = null;
     }
-    if (needsAnotherSave) {
-      await _saveDraft();
+    final pending = _pendingSave;
+    _pendingSave = null;
+    if (needsAnotherSave || pending != null) {
+      await _saveDraft(pending: pending);
     }
   }
 

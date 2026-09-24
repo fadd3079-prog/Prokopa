@@ -196,7 +196,11 @@ class TodayHabit {
   final int completedThisWeek;
   final int? weeklyTarget;
 
-  bool get isComplete => execution?.state == HabitExecutionState.completed;
+  bool get isComplete => switch ((isWeeklyTarget, weeklyTarget)) {
+    (true, final target?) => completedThisWeek >= target,
+    (true, null) => false,
+    (false, _) => execution?.state == HabitExecutionState.completed,
+  };
 
   bool get isWeeklyTarget =>
       habit.draft.frequency == HabitFrequency.weeklyTarget;
