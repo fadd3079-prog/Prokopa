@@ -442,11 +442,13 @@ class _MoodButton extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 56),
           child: Ink(
             decoration: BoxDecoration(
-              color: selected ? AppColors.indigo50 : Colors.transparent,
+              color: selected
+                  ? theme.colorScheme.primaryContainer
+                  : Colors.transparent,
               borderRadius: AppRadius.mdBorder,
               border: Border.all(
                 color: selected
-                    ? AppColors.indigo600
+                    ? theme.colorScheme.primary
                     : theme.colorScheme.outlineVariant,
                 width: selected ? 2 : 1,
               ),
@@ -456,7 +458,7 @@ class _MoodButton extends StatelessWidget {
                 icon,
                 size: 24,
                 color: selected
-                    ? AppColors.indigo700
+                    ? theme.colorScheme.onPrimaryContainer
                     : theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -510,16 +512,16 @@ class _JournalDateBar extends StatelessWidget {
                     width: chipWidth < 52 ? 52 : chipWidth,
                     decoration: BoxDecoration(
                       color: selected
-                          ? AppColors.indigo600
+                          ? Theme.of(context).colorScheme.primary
                           : date == today
-                          ? AppColors.indigo50
+                          ? Theme.of(context).colorScheme.primaryContainer
                           : Theme.of(context).colorScheme.surface,
                       borderRadius: AppRadius.mdBorder,
                       border: Border.all(
                         color: selected
-                            ? AppColors.indigo600
+                            ? Theme.of(context).colorScheme.primary
                             : date == today
-                            ? AppColors.indigo200
+                            ? Theme.of(context).colorScheme.primary
                             : Theme.of(context).colorScheme.outlineVariant,
                       ),
                     ),
@@ -532,14 +534,18 @@ class _JournalDateBar extends StatelessWidget {
                             style: Theme.of(context).textTheme.titleLarge
                                 ?.copyWith(
                                   fontSize: 18,
-                                  color: selected ? Colors.white : null,
+                                  color: selected
+                                      ? Theme.of(context).colorScheme.onPrimary
+                                      : null,
                                 ),
                           ),
                           Text(
                             shortMonths[date.month - 1],
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
-                                  color: selected ? Colors.white : null,
+                                  color: selected
+                                      ? Theme.of(context).colorScheme.onPrimary
+                                      : null,
                                 ),
                           ),
                         ],

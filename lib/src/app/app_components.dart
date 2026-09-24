@@ -308,14 +308,14 @@ class _MonthPickerState extends State<_MonthPicker> {
                       child: Ink(
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? AppColors.indigo600
+                              ? theme.colorScheme.primary
                               : isCurrent
-                              ? AppColors.indigo50
+                              ? theme.colorScheme.primaryContainer
                               : Colors.transparent,
                           borderRadius: AppRadius.mdBorder,
                           border: Border.all(
                             color: isCurrent && !isSelected
-                                ? AppColors.indigo200
+                                ? theme.colorScheme.primary
                                 : Colors.transparent,
                           ),
                         ),
@@ -324,9 +324,9 @@ class _MonthPickerState extends State<_MonthPicker> {
                             shortMonths[index],
                             style: theme.textTheme.labelMedium?.copyWith(
                               color: isSelected
-                                  ? Colors.white
+                                  ? theme.colorScheme.onPrimary
                                   : isCurrent
-                                  ? AppColors.indigo700
+                                  ? theme.colorScheme.onPrimaryContainer
                                   : theme.colorScheme.onSurface,
                             ),
                           ),
@@ -353,53 +353,56 @@ class HistoricalMonthBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: controller,
-      builder: (context, _) => AnimatedSize(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : AppMotion.fast,
-        curve: AppMotion.curve,
-        child: controller.isCurrentMonth
-            ? const SizedBox.shrink()
-            : Semantics(
-                liveRegion: true,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: AppColors.amber50,
-                    borderRadius: AppRadius.mdBorder,
-                    border: Border.all(color: AppColors.amber200),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
+      builder: (context, _) {
+        final scheme = Theme.of(context).colorScheme;
+        return AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : AppMotion.fast,
+          curve: AppMotion.curve,
+          child: controller.isCurrentMonth
+              ? const SizedBox.shrink()
+              : Semantics(
+                  liveRegion: true,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.tertiaryContainer,
+                      borderRadius: AppRadius.mdBorder,
+                      border: Border.all(color: scheme.tertiary),
                     ),
-                    child: Row(
-                      children: [
-                        const ExcludeSemantics(
-                          child: Icon(
-                            Icons.history,
-                            size: 18,
-                            color: AppColors.amber700,
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        children: [
+                          ExcludeSemantics(
+                            child: Icon(
+                              Icons.history,
+                              size: 18,
+                              color: scheme.onTertiaryContainer,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Anda sedang melihat riwayat ${formatMonth(controller.displayedMonth)}.',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: AppColors.amber700),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Anda sedang melihat riwayat ${formatMonth(controller.displayedMonth)}.',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: scheme.onTertiaryContainer),
+                            ),
                           ),
-                        ),
-                        TextButton(
-                          onPressed: controller.showToday,
-                          child: const Text('Hari ini'),
-                        ),
-                      ],
+                          TextButton(
+                            onPressed: controller.showToday,
+                            child: const Text('Hari ini'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-      ),
+        );
+      },
     );
   }
 }

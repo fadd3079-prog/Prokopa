@@ -556,16 +556,16 @@ class _DateChip extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             color: selected
-                ? AppColors.indigo600
+                ? theme.colorScheme.primary
                 : isToday
-                ? AppColors.indigo50
+                ? theme.colorScheme.primaryContainer
                 : theme.colorScheme.surface,
             borderRadius: AppRadius.mdBorder,
             border: Border.all(
               color: selected
-                  ? AppColors.indigo600
+                  ? theme.colorScheme.primary
                   : isToday
-                  ? AppColors.indigo200
+                  ? theme.colorScheme.primary
                   : theme.colorScheme.outlineVariant,
             ),
           ),
@@ -578,7 +578,7 @@ class _DateChip extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontSize: 10,
                     color: selected
-                        ? Colors.white
+                        ? theme.colorScheme.onPrimary
                         : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -587,7 +587,7 @@ class _DateChip extends StatelessWidget {
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontSize: 18,
                     color: selected
-                        ? Colors.white
+                        ? theme.colorScheme.onPrimary
                         : theme.colorScheme.onSurface,
                   ),
                 ),
@@ -596,7 +596,7 @@ class _DateChip extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontSize: 10,
                     color: selected
-                        ? Colors.white
+                        ? theme.colorScheme.onPrimary
                         : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -631,6 +631,7 @@ class _HabitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completed = today.isComplete;
+    final scheme = Theme.of(context).colorScheme;
     final accent = _habitColor(today.habit.draft.color);
     final metadata = today.isWeeklyTarget
         ? '${today.completedThisWeek}/${today.weeklyTarget} minggu ini'
@@ -649,14 +650,10 @@ class _HabitCard extends StatelessWidget {
             ? Duration.zero
             : AppMotion.fast,
         decoration: BoxDecoration(
-          color: completed
-              ? AppColors.emerald50
-              : Theme.of(context).colorScheme.surface,
+          color: completed ? scheme.secondaryContainer : scheme.surface,
           borderRadius: AppRadius.lgBorder,
           border: Border.all(
-            color: completed
-                ? AppColors.emerald100
-                : Theme.of(context).colorScheme.outlineVariant,
+            color: completed ? scheme.secondary : scheme.outlineVariant,
           ),
         ),
         child: Material(
@@ -682,13 +679,11 @@ class _HabitCard extends StatelessWidget {
                     DecoratedBox(
                       decoration: BoxDecoration(
                         color: completed
-                            ? AppColors.emerald600
+                            ? scheme.secondary
                             : Colors.transparent,
                         borderRadius: AppRadius.mdBorder,
                         border: Border.all(
-                          color: completed
-                              ? AppColors.emerald600
-                              : Theme.of(context).colorScheme.outline,
+                          color: completed ? scheme.secondary : scheme.outline,
                           width: 2,
                         ),
                       ),
@@ -698,8 +693,8 @@ class _HabitCard extends StatelessWidget {
                           completed ? Icons.check : Icons.circle_outlined,
                           size: 20,
                           color: completed
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                              ? scheme.onSecondary
+                              : scheme.onSurfaceVariant,
                         ),
                       ),
                     ),

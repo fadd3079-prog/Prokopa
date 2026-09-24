@@ -647,6 +647,7 @@ class _DashboardHabitRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final complete = today.isComplete;
+    final scheme = Theme.of(context).colorScheme;
     return Semantics(
       button: !complete || !today.isWeeklyTarget,
       label: today.habit.draft.title,
@@ -666,13 +667,11 @@ class _DashboardHabitRow extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             color: complete
-                ? AppColors.emerald50
-                : Theme.of(context).colorScheme.surfaceContainerLow,
+                ? scheme.secondaryContainer
+                : scheme.surfaceContainerLow,
             borderRadius: AppRadius.mdBorder,
             border: Border.all(
-              color: complete
-                  ? AppColors.emerald100
-                  : Theme.of(context).colorScheme.outlineVariant,
+              color: complete ? scheme.secondary : scheme.outlineVariant,
             ),
           ),
           child: ExcludeSemantics(
@@ -684,8 +683,8 @@ class _DashboardHabitRow extends StatelessWidget {
                       : Icons.radio_button_unchecked,
                   size: 20,
                   color: complete
-                      ? AppColors.emerald700
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ? scheme.onSecondaryContainer
+                      : scheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
                 Expanded(

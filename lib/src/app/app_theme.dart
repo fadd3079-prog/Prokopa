@@ -277,10 +277,18 @@ abstract final class AppTheme {
       onTertiaryContainer: brightness == Brightness.light
           ? AppColors.violet600
           : AppColors.purple200,
-      error: AppColors.rose600,
-      onError: Colors.white,
-      errorContainer: AppColors.rose50,
-      onErrorContainer: AppColors.rose600,
+      error: brightness == Brightness.light
+          ? AppColors.rose600
+          : const Color(0xFFFFB4AB),
+      onError: brightness == Brightness.light
+          ? Colors.white
+          : const Color(0xFF690005),
+      errorContainer: brightness == Brightness.light
+          ? AppColors.rose50
+          : const Color(0xFF4B1018),
+      onErrorContainer: brightness == Brightness.light
+          ? AppColors.rose600
+          : const Color(0xFFFFDAD6),
       surface: surface,
       onSurface: primaryText,
       surfaceContainerLow: background,

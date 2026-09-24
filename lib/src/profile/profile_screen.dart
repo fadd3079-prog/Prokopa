@@ -112,181 +112,185 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final name = _profile.name.trim();
     final initials = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
 
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: ProkopaSpacing.xxl),
-        children: [
-          Padding(
-            padding: ProkopaSpacing.screenPadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'Settings',
-                    style: Theme.of(context).textTheme.headlineLarge,
-                  ),
-                ),
-                const SizedBox(height: ProkopaSpacing.xs),
-                Text(
-                  'Kelola profil lokal, privasi, dan preferensi aplikasi.',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: ProkopaSpacing.xxl),
-                Card(
-                  child: Padding(
-                    padding: ProkopaSpacing.cardPadding,
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 34,
-                          backgroundColor: _avatarColor(
-                            context,
-                            _profile.avatar,
-                          ),
-                          child: Text(
-                            initials,
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                          ),
-                        ),
-                        const SizedBox(width: ProkopaSpacing.xl),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _profile.name,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              const SizedBox(height: ProkopaSpacing.xs),
-                              Text(
-                                'Profil lokal',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (!_editing)
-                          IconButton(
-                            onPressed: () => setState(() => _editing = true),
-                            icon: const ExcludeSemantics(
-                              child: Icon(Icons.edit_outlined),
-                            ),
-                            tooltip: 'Edit profil',
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: ProkopaSpacing.xxxl),
-
-          if (_editing)
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: ProkopaSpacing.xxl),
+          children: [
             Padding(
               padding: ProkopaSpacing.screenPadding,
-              child: _editor(context),
-            )
-          else ...[
-            _SectionHeader('Preferensi & Keamanan'),
-            if (widget.notificationStore != null &&
-                widget.notificationService != null)
-              _SettingsTile(
-                icon: Icons.notifications_outlined,
-                title: 'Pengingat',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => NotificationsScreen(
-                      store: widget.notificationStore!,
-                      service: widget.notificationService!,
-                      habitReminders: widget.habitReminderService,
-                    ),
-                  ),
-                ),
-              ),
-            if (widget.appLockStore != null && widget.onDataReset != null)
-              _SettingsTile(
-                icon: Icons.lock_outline,
-                title: 'Privasi',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => PrivacyScreen(
-                      store: widget.appLockStore!,
-                      onDataReset: widget.onDataReset!,
-                      notificationService: widget.notificationService,
-                    ),
-                  ),
-                ),
-              ),
-            if (widget.backupService != null)
-              _SettingsTile(
-                icon: Icons.save_outlined,
-                title: 'Backup data',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => BackupScreen(
-                      backup: widget.backupService!,
-                      notificationService: widget.notificationService,
-                      onRestored: widget.onDataRestored,
-                    ),
-                  ),
-                ),
-              ),
-
-            if (widget.achievementStore != null) ...[
-              const SizedBox(height: ProkopaSpacing.xl),
-              _SectionHeader('Aktivitas'),
-              _SettingsTile(
-                icon: Icons.military_tech_outlined,
-                title: 'Pencapaian',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        AchievementsScreen(store: widget.achievementStore!),
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: ProkopaSpacing.huge),
-            Center(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ProkopaLogo(
-                    asset: Theme.of(context).brightness == Brightness.dark
-                        ? BrandConstants.logoDark
-                        : BrandConstants.logoLight,
-                    height: 36,
-                  ),
-                  const SizedBox(height: ProkopaSpacing.sm),
-                  Text(
-                    'Prokopa',
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Settings',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
                   ),
                   const SizedBox(height: ProkopaSpacing.xs),
                   Text(
-                    'Versi 1.2.0',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    'Kelola profil lokal, privasi, dan preferensi aplikasi.',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: ProkopaSpacing.xxl),
+                  Card(
+                    child: Padding(
+                      padding: ProkopaSpacing.cardPadding,
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 34,
+                            backgroundColor: _avatarColor(
+                              context,
+                              _profile.avatar,
+                            ),
+                            child: Text(
+                              initials,
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: ProkopaSpacing.xl),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _profile.name,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: ProkopaSpacing.xs),
+                                Text(
+                                  'Profil lokal',
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!_editing)
+                            IconButton(
+                              onPressed: () => setState(() => _editing = true),
+                              icon: const ExcludeSemantics(
+                                child: Icon(Icons.edit_outlined),
+                              ),
+                              tooltip: 'Edit profil',
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: ProkopaSpacing.xxxl),
+
+            if (_editing)
+              Padding(
+                padding: ProkopaSpacing.screenPadding,
+                child: _editor(context),
+              )
+            else ...[
+              _SectionHeader('Preferensi & Keamanan'),
+              if (widget.notificationStore != null &&
+                  widget.notificationService != null)
+                _SettingsTile(
+                  icon: Icons.notifications_outlined,
+                  title: 'Pengingat',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => NotificationsScreen(
+                        store: widget.notificationStore!,
+                        service: widget.notificationService!,
+                        habitReminders: widget.habitReminderService,
+                      ),
+                    ),
+                  ),
+                ),
+              if (widget.appLockStore != null && widget.onDataReset != null)
+                _SettingsTile(
+                  icon: Icons.lock_outline,
+                  title: 'Privasi',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PrivacyScreen(
+                        store: widget.appLockStore!,
+                        onDataReset: widget.onDataReset!,
+                        notificationService: widget.notificationService,
+                      ),
+                    ),
+                  ),
+                ),
+              if (widget.backupService != null)
+                _SettingsTile(
+                  icon: Icons.save_outlined,
+                  title: 'Backup data',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BackupScreen(
+                        backup: widget.backupService!,
+                        notificationService: widget.notificationService,
+                        onRestored: widget.onDataRestored,
+                      ),
+                    ),
+                  ),
+                ),
+
+              if (widget.achievementStore != null) ...[
+                const SizedBox(height: ProkopaSpacing.xl),
+                _SectionHeader('Aktivitas'),
+                _SettingsTile(
+                  icon: Icons.military_tech_outlined,
+                  title: 'Pencapaian',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          AchievementsScreen(store: widget.achievementStore!),
+                    ),
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: ProkopaSpacing.huge),
+              Center(
+                child: Column(
+                  children: [
+                    ProkopaLogo(
+                      asset: Theme.of(context).brightness == Brightness.dark
+                          ? BrandConstants.logoDark
+                          : BrandConstants.logoLight,
+                      height: 36,
+                    ),
+                    const SizedBox(height: ProkopaSpacing.sm),
+                    Text(
+                      'Prokopa',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: ProkopaSpacing.xs),
+                    Text(
+                      'Versi 1.2.0',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
