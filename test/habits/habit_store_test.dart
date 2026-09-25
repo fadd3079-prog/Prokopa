@@ -96,6 +96,24 @@ void main() {
     expect(execution.recordedAt, actionTime.toUtc());
   });
 
+  test('missed habit can be completed later', () async {
+    final result = await openStore();
+    final plannedDate = DateTime(2026, 9, 24);
+    final actionTime = DateTime(2026, 9, 25, 10, 30);
+    final habit = await result.store.create(
+      draft(startDate: plannedDate),
+      now: plannedDate,
+    );
+    await result.store.reconcileMissed(before: actionTime);
+
+    await result.store.complete(habit, date: plannedDate, now: actionTime);
+
+    final execution = (await result.store.history(habit)).single;
+    expect(execution.state, HabitExecutionState.completed);
+    expect(execution.plannedDate, plannedDate);
+    expect(execution.recordedAt, actionTime.toUtc());
+  });
+
   test('skip remains distinct from completion', () async {
     final result = await openStore();
     final habit = await result.store.create(draft());
@@ -289,19 +307,18 @@ void main() {
     expect(today.single.weeklyTarget, 5);
   });
 
-  test('future executions are rejected before they are persisted', () async {
+  test('future executions can be persisted in development', () async {
     final result = await openStore();
     final today = DateTime.now();
     final habit = await result.store.create(
       draft(startDate: today),
       now: today,
     );
+    final futureDate = today.add(const Duration(days: 1));
 
-    await expectLater(
-      result.store.complete(habit, date: today.add(const Duration(days: 1))),
-      throwsStateError,
-    );
-    expect(await result.store.history(habit), isEmpty);
+    await result.store.complete(habit, date: futureDate);
+
+    expect((await result.store.history(habit)).single.plannedDate, futureDate);
   });
 
   test('returning after a missed occurrence records one recovery', () async {

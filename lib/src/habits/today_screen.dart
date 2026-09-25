@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +7,6 @@ import 'package:prokopa/src/app/app_date_controller.dart';
 import 'package:prokopa/src/app/app_theme.dart';
 import 'package:prokopa/src/habits/habit.dart';
 import 'package:prokopa/src/habits/habit_form_screen.dart';
-import 'package:prokopa/src/habits/habit_list_screen.dart';
 import 'package:prokopa/src/habits/habit_store.dart';
 import 'package:prokopa/src/journal/journal_store.dart';
 import 'package:prokopa/src/notifications/habit_reminder_service.dart';
@@ -116,6 +116,7 @@ class _TodayScreenState extends State<TodayScreen> {
       MaterialPageRoute(
         builder: (_) => HabitFormScreen(
           store: widget.store,
+          initialDate: _dateController.selectedDate,
           reminderService: widget.reminderService,
         ),
       ),
@@ -245,18 +246,6 @@ class _TodayScreenState extends State<TodayScreen> {
     }
   }
 
-  Future<void> _openHabitList() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => HabitListScreen(
-          store: widget.store,
-          reminderService: widget.reminderService,
-        ),
-      ),
-    );
-    await _reload();
-  }
-
   Future<void> _openSleep() async {
     final store = widget.wellbeingStore;
     if (store == null) {
@@ -376,21 +365,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   child: _HabitsSleepCard(record: _sleep, onTap: _openSleep),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 48),
-                sliver: SliverToBoxAdapter(
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: TextButton.icon(
-                      onPressed: _openHabitList,
-                      icon: const ExcludeSemantics(
-                        child: Icon(Icons.tune, size: 18),
-                      ),
-                      label: const Text('Kelola semua kebiasaan'),
-                    ),
-                  ),
-                ),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 48)),
             ],
           ),
         ),
@@ -537,7 +512,7 @@ class _DateChip extends StatelessWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final isToday = date == today;
-    final isFuture = date.isAfter(today);
+    final isFuture = !kDebugMode && date.isAfter(today);
     final theme = Theme.of(context);
     final scaledWidth = MediaQuery.textScalerOf(context).scale(52);
     return Semantics(

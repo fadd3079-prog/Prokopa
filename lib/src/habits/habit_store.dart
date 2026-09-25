@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:prokopa/src/core/date/local_date.dart';
 import 'package:prokopa/src/core/identifiers/local_id.dart';
 import 'package:prokopa/src/habits/habit.dart';
@@ -131,7 +132,8 @@ class HabitStore {
         return;
       }
       if (rows.singleOrNull?['state'] case final state?
-          when state != HabitExecutionState.completed.value) {
+          when state != HabitExecutionState.completed.value &&
+              state != HabitExecutionState.missed.value) {
         throw StateError('$state execution cannot be completed implicitly.');
       }
       final timestamp = utcTimestamp(actionTime);
@@ -904,7 +906,7 @@ class HabitStore {
   }
 
   void _ensureNotFuture(DateTime day) {
-    if (_localDay(day).isAfter(_localDay(DateTime.now()))) {
+    if (!kDebugMode && _localDay(day).isAfter(_localDay(DateTime.now()))) {
       throw StateError('A future habit execution cannot be recorded.');
     }
   }

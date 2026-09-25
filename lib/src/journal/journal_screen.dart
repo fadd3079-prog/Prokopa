@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:prokopa/src/app/app_components.dart';
 import 'package:prokopa/src/app/app_date_controller.dart';
@@ -499,7 +500,7 @@ class _JournalDateBar extends StatelessWidget {
               final now = DateTime.now();
               final today = DateTime(now.year, now.month, now.day);
               final selected = index == 7;
-              final future = date.isAfter(today);
+              final future = !kDebugMode && date.isAfter(today);
               return Semantics(
                 button: true,
                 selected: selected,
